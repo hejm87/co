@@ -5,19 +5,23 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <ucontext.h>
-#include <vector>
+
 #include <memory>
 #include <functional>
 #include <atomic>
 #include <mutex>
 #include <thread>
+
+#include <vector>
+#include <map>
+
 #include <sys/syscall.h>
 
 using namespace std;
 
 const int DEFAULT_STACK_SZIE = 8 * 1024;
-const int MAX_COROUTINE_SIZE = 100;
-const int CO_THREAD_SIZE = 3;
+const int MAX_COROUTINE_SIZE = 2;
+const int CO_THREAD_SIZE = 2;
 
 enum CoState{
 	FREE,
@@ -29,18 +33,12 @@ enum CoState{
 class Coroutine
 {
 public:
-	Coroutine(int id) {
-		_id = id;
-		_state = FREE;
-		_stack = (char*)malloc(DEFAULT_STACK_SZIE);
-	}
-
-	~Coroutine() {
-		free(_stack);
-	}
+	Coroutine(int id);
+	~Coroutine();
 
 public:
 	int		_id;
+	bool	_init;
 	CoState	_state;	
 	char*	_stack;
 
@@ -55,6 +53,8 @@ public:
 	~CoSchedule();
 
 	void run();
+
+	void yield();
 
 private:
 	void process();
@@ -76,11 +76,19 @@ public:
 
 	bool create(function<void()> func);
 
+	void suspend();
+
 	shared_ptr<Coroutine> get_co(int id);
 
 	shared_ptr<Coroutine> get_ready_co();
 
+	void add_free_co(const shared_ptr<Coroutine>& co);
+
 	void add_free_co(const vector<shared_ptr<Coroutine>>& cos);
+
+	void add_ready_co(const shared_ptr<Coroutine>& co);
+
+	void add_suspend_co(const shared_ptr<Coroutine>& co);
 
 	static void co_run(int id);
 
@@ -91,6 +99,8 @@ private:
 	vector<shared_ptr<Coroutine>> _lst_co;
 	vector<shared_ptr<Coroutine>> _lst_free;
 	vector<shared_ptr<Coroutine>> _lst_ready;
+
+	map<int, shared_ptr<Coroutine>> _map_suspend;
 
 	vector<thread> _threads;
 
