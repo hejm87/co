@@ -7,13 +7,15 @@
 #include <ucontext.h>
 
 #include <memory>
-#include <functional>
 #include <atomic>
+#include <functional>
+
 #include <mutex>
 #include <thread>
 
-#include <vector>
 #include <map>
+#include <list>
+#include <vector>
 
 #include <sys/syscall.h>
 
@@ -23,11 +25,21 @@ const int DEFAULT_STACK_SZIE = 8 * 1024;
 const int MAX_COROUTINE_SIZE = 2;
 const int CO_THREAD_SIZE = 2;
 
-enum CoState{
+enum CoState
+{
 	FREE,
 	RUNNABLE,
 	RUNNING,
 	SUSPEND
+};
+
+enum CoSuspendState
+{
+	SUSPEND_NONE = 0,
+	SUSPEND_LOCK,
+	SUSPEND_SLEEP,
+	SUSPEND_CHANNEL,
+	SUSPEND_IO_BLOCK,
 };
 
 class Coroutine
@@ -39,8 +51,10 @@ public:
 public:
 	int		_id;
 	bool	_init;
-	CoState	_state;	
 	char*	_stack;
+
+	CoState	_state;
+	CoSuspendState	_suspend_state;
 
 	ucontext_t _ctx;
 	function<void()> _func;
@@ -55,6 +69,8 @@ public:
 	void run();
 
 	void yield();
+
+	void switch_to_main();
 
 private:
 	void process();
@@ -74,11 +90,11 @@ public:
 	CoManager();
 	~CoManager();
 
-	bool create(function<void()> func);
-
-	void suspend();
+	bool create(const function<void()>& func);
 
 	shared_ptr<Coroutine> get_co(int id);
+
+	shared_ptr<Coroutine> get_running_co();
 
 	shared_ptr<Coroutine> get_ready_co();
 
@@ -90,15 +106,23 @@ public:
 
 	void add_suspend_co(const shared_ptr<Coroutine>& co);
 
+	bool remove_suspend(int id);
+
+	void lock();
+
+	void unlock();
+
+	mutex* get_locker();
+
 	static void co_run(int id);
 
 public:
 	atomic<bool> _is_stop;
 
 private:
-	vector<shared_ptr<Coroutine>> _lst_co;
-	vector<shared_ptr<Coroutine>> _lst_free;
-	vector<shared_ptr<Coroutine>> _lst_ready;
+	vector<shared_ptr<Coroutine>>	_lst_co;
+	list<shared_ptr<Coroutine>>		_lst_free;
+	list<shared_ptr<Coroutine>>		_lst_ready;
 
 	map<int, shared_ptr<Coroutine>> _map_suspend;
 

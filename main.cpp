@@ -4,6 +4,8 @@
 #include <thread>
 #include <atomic>
 #include "co.h"
+#include "co_mutex.h"
+#include "utils.h"
 
 using namespace std;
 
@@ -15,12 +17,14 @@ atomic<int> g_count(0);
 void reuse_test();
 void exception_test();
 void yield_test();
+void lock_test();
 
 int main()
 {
-	reuse_test();
+//	reuse_test();
 //	exception_test();
 //	yield_test();
+	lock_test();
 	return 0;
 }
 
@@ -87,3 +91,26 @@ void yield_test()
 	printf("main finish\n");
 }
 
+void lock_test()
+{
+	int total = 0;
+	int loop  = 100;
+	int co_count = 2;
+
+	CoMutex mutex;
+
+	for (int id = 0; id < co_count; id++) {
+		g_manager.create([&mutex, loop, id, &total] {
+			for (int i = 0; i < loop; i++) {
+				mutex.lock();
+				printf("[%s] ############### tid:%d, cid:%d, app.lock succeed\n", date_ms().c_str(), gettid(), getcid());
+				total++;
+				mutex.unlock();
+				printf("[%s] ############### tid:%d, cid:%d, app.unlock succeed\n", date_ms().c_str(), gettid(), getcid());
+			}
+		});
+	}
+	usleep(100 * 1000);
+	printf("[%s] after wait, a1:%d, a2:%d\n", date_ms().c_str(), co_count * loop, total);
+	assert(co_count * loop == total);
+}

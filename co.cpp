@@ -1,5 +1,7 @@
 #include <unistd.h>
+#include <assert.h>
 #include "co.h"
+#include "utils.h"
 
 CoManager g_manager;
 
@@ -50,7 +52,7 @@ void CoSchedule::run()
 
 		if (!co->_init) {
 
-			printf("++++++++++ co_schedule, schedule1, tid:%d, cid:%d\n", gettid(), co->_id);
+			printf("[%s] ++++++++++ co_schedule, schedule1, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
 
 			co->_init = true;
 
@@ -71,13 +73,13 @@ void CoSchedule::run()
 		_running_id = -1;
 
 		if (co->_state == FREE) {
-			printf("++++++++++ co_schedule, co_exit, tid:%d, cid:%d\n", gettid(), co->_id);
+			printf("[%s] ++++++++++ co_schedule, co_exit, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
 			g_manager.add_free_co(co);
 		} else if (co->_state == RUNNABLE) {
-			printf("++++++++++ co_schedule, co_yield, tid:%d, cid:%d\n", gettid(), co->_id);
+			printf("[%s] ++++++++++ co_schedule, co_yield, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
 			g_manager.add_ready_co(co);
 		} else if (co->_state == SUSPEND) {
-			printf("++++++++++ co_schedule, co_suspend, tid:%d, cid:%d\n", gettid(), co->_id);
+			printf("[%s] ++++++++++ co_schedule, co_suspend, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
 			g_manager.add_suspend_co(co);
 		}
 	
@@ -92,7 +94,13 @@ void CoSchedule::yield()
 	auto co = g_manager.get_co(_running_id);
 	co->_state = RUNNABLE;
 
-	swapcontext(&(co->_ctx), &_main_ctx);
+	switch_to_main();
+}
+
+void CoSchedule::switch_to_main()
+{
+	assert(_running_id != -1);
+	swapcontext(&(g_manager.get_co(_running_id)->_ctx), &_main_ctx);
 }
 
 void CoSchedule::process()
@@ -131,7 +139,7 @@ CoManager::~CoManager()
 	printf("~CoManager, end\n");
 }
 
-bool CoManager::create(function<void()> func)
+bool CoManager::create(const function<void()>& func)
 {
 	lock_guard<mutex> lock(_mutex);
 
@@ -149,19 +157,21 @@ bool CoManager::create(function<void()> func)
 	return true;
 }
 
-void CoManager::suspend()
-{
-	auto co = _lst_co[g_schedule->_running_id];
-	co->_state = SUSPEND;
-
-	swapcontext(&(co->_ctx), &(g_schedule->_main_ctx));
-}
-
 shared_ptr<Coroutine> CoManager::get_co(int id)
 {
 	shared_ptr<Coroutine> co;
 	if (id < (int)_lst_co.size()) {
 		co = _lst_co[id];
+	}
+	return co;
+}
+
+shared_ptr<Coroutine> CoManager::get_running_co()
+{
+	shared_ptr<Coroutine> co;
+	auto cid = g_schedule->_running_id;
+	if (cid >= 0 && cid < (int)_lst_co.size()) {
+		co = _lst_co[cid];
 	}
 	return co;
 }
@@ -173,7 +183,7 @@ shared_ptr<Coroutine> CoManager::get_ready_co()
 	if (_lst_ready.size() > 0) {
 		co = _lst_ready.front();
 		_lst_ready.erase(_lst_ready.begin());
-		printf("co_manager, get_ready_co, cid:%d\n", co->_id);
+		printf("[%s] co_manager, get_ready_co, cid:%d\n", date_ms().c_str(), co->_id);
 	}
 	return co;	
 }
@@ -202,6 +212,22 @@ void CoManager::add_suspend_co(const shared_ptr<Coroutine>& co)
 {
 	lock_guard<mutex> lock(_mutex);
 	_map_suspend[co->_id] = co;	
+}
+
+bool CoManager::remove_suspend(int id)
+{
+	lock_guard<mutex> lock(_mutex);
+	auto iter = _map_suspend.find(id);
+	if (iter == _map_suspend.end()) {
+		return false;
+	}
+	_map_suspend.erase(id);
+	return true;
+}
+
+mutex* CoManager::get_locker()
+{
+	return &_mutex;
 }
 
 void CoManager::co_run(int id)
