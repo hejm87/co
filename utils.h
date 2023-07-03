@@ -5,13 +5,15 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
+#include <string>
+
 using namespace std;
 
 #define THROW_EXCEPTION(fmt, ...) \
 { \
 	char ex[1024]; \
 	snprintf(ex, sizeof(ex), "[FILE:%s,LINE:%d] exception:" fmt, __FILE__, __LINE__, ##__VA_ARGS__); \
-	throw ex; \
+	throw string(ex); \
 }
 
 inline std::string date_ms(long time_ms = 0) {

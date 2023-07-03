@@ -13,6 +13,10 @@ public:
 	CoMutex();
 	CoMutex(const CoMutex&) = delete;
 
+	~CoMutex();
+
+	CoMutex& operator=(const CoMutex&) = delete;
+
 	void lock();
 
 //	bool try_lock();

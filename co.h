@@ -19,6 +19,8 @@
 
 #include <sys/syscall.h>
 
+#include "common/any.h"
+
 using namespace std;
 
 const int DEFAULT_STACK_SZIE = 8 * 1024;
@@ -42,6 +44,19 @@ enum CoSuspendState
 	SUSPEND_IO_BLOCK,
 };
 
+enum CoChannelBlockType
+{
+	CHANNEL_BLOCK_NULL = 0,
+	CHANNEL_BLOCK_SEND,
+	CHANNEL_BLOCK_RECV,
+};
+
+struct BlockChannelParam
+{
+	CoChannelBlockType type;	
+	Any param;
+};
+
 class Coroutine
 {
 public:
@@ -54,7 +69,9 @@ public:
 	char*	_stack;
 
 	CoState	_state;
-	CoSuspendState	_suspend_state;
+	CoSuspendState _suspend_state;
+
+	BlockChannelParam _channel_param;
 
 	ucontext_t _ctx;
 	function<void()> _func;
@@ -106,7 +123,9 @@ public:
 
 	void add_suspend_co(const shared_ptr<Coroutine>& co);
 
-	bool remove_suspend(int id);
+	bool resume_co(int id);
+
+//	bool remove_suspend(int id);
 
 	void lock();
 

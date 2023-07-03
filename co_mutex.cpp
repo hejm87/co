@@ -8,6 +8,11 @@ CoMutex::CoMutex()
 	_value = 0;
 }
 
+CoMutex::~CoMutex()
+{
+	printf("~CoMutex, ptr:%p\n", this);
+}
+
 void CoMutex::lock()
 {
 	auto is_wake_up = false;
@@ -17,34 +22,29 @@ void CoMutex::lock()
 	do {
 		int expect = 0;
 		if (_value.compare_exchange_strong(expect, 1)) {
-			printf("[%s] ------------- tid:%d, cid:%d, lock succeed\n", date_ms().c_str(), gettid(), getcid());
 			_lock_co = co;
 			assert(_lock_co);
 			return ;
 		}
 
-		{
-			lock_guard<mutex> lock(*(g_manager.get_locker()));
-			if (!_value.load()) {
-				continue ;
-			}
-
-			printf("[%s] ------------- tid:%d, cid:%d, is locked, suspend\n", date_ms().c_str(), gettid(), getcid());
-			co->_state = SUSPEND;
-			co->_suspend_state = SUSPEND_LOCK;
-			is_wake_up ? _block_list.push_front(co) : _block_list.push_back(co);
-			g_manager.add_suspend_co(co);
+		if (!_value.load()) {
+			continue ;
 		}
+
+		co->_state = SUSPEND;
+		co->_suspend_state = SUSPEND_LOCK;
+		is_wake_up ? _block_list.push_front(co) : _block_list.push_back(co);
+		g_manager.add_suspend_co(co);
 		g_schedule->switch_to_main();
-		printf("[%s] ------------- tid:%d, cid:%d, suspend wake up\n", date_ms().c_str(), gettid(), getcid());
+
 		is_wake_up = true;
+
 	} while (1);
 }
 
 void CoMutex::unlock()
 {
 	if (!_value.load()) {
-		printf("[%s] ------------- tid:%d, cid:%d, unlock but value not match\n", date_ms().c_str(), gettid(), getcid());
 		return ;
 	}
 	auto cur_co = g_manager.get_running_co();
@@ -58,22 +58,22 @@ void CoMutex::unlock()
 		);
 	}
 
-	lock_guard<mutex> lock(*(g_manager.get_locker()));
-
 	_lock_co = nullptr;
 	_value.store(0);
-	printf("[%s] ------------- tid:%d, cid:%d, unlock\n", date_ms().c_str(), gettid(), getcid());
+
 	if (_block_list.size() > 0) {
 
 		auto resume_co = _block_list.front();
 		_block_list.pop_front();
 
-		assert(g_manager.remove_suspend(resume_co->_id));
+	//	assert(g_manager.remove_suspend(resume_co->_id));
 
-		resume_co->_state = RUNNABLE;
-		resume_co->_suspend_state = SUSPEND_NONE;
+	//	resume_co->_state = RUNNABLE;
+	//	resume_co->_suspend_state = SUSPEND_NONE;
 
-		g_manager.add_ready_co(resume_co);
-		printf("[%s] ------------- tid:%d, cid:%d, unlock, resume cid:%d\n", date_ms().c_str(), gettid(), getcid(), resume_co->_id);
+	//	g_manager.add_ready_co(resume_co);
+
+		auto ret = g_manager.resume_co(resume_co->_id);
+		assert(ret);
 	}
 }

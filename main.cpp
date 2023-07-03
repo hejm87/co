@@ -5,6 +5,7 @@
 #include <atomic>
 #include "co.h"
 #include "co_mutex.h"
+#include "co_channel.h"
 #include "utils.h"
 
 using namespace std;
@@ -18,13 +19,15 @@ void reuse_test();
 void exception_test();
 void yield_test();
 void lock_test();
+void channel_test();
 
 int main()
 {
 //	reuse_test();
 //	exception_test();
 //	yield_test();
-	lock_test();
+//	lock_test();
+	channel_test();
 	return 0;
 }
 
@@ -113,4 +116,41 @@ void lock_test()
 	usleep(100 * 1000);
 	printf("[%s] after wait, a1:%d, a2:%d\n", date_ms().c_str(), co_count * loop, total);
 	assert(co_count * loop == total);
+}
+
+void channel_test()
+{
+	atomic<bool> is_end(false);
+	CoChannel<int> chan;
+
+	g_manager.create([&chan] {
+		for (int i = 0; i < 10; i++) {
+			printf("[%s] ############ tid:%d, cid:%d, ready to write value:%d\n", date_ms().c_str(), gettid(), getcid(), i);
+			chan << i;
+			printf("[%s] ############ tid:%d, cid:%d, write value:%d\n", date_ms().c_str(), gettid(), getcid(), i);
+			usleep(200 * 1000);
+		}
+		chan.close();
+		printf("[%s] ############ tid:%d, cid:%d, chan.close\n", date_ms().c_str(), gettid(), getcid());
+	});
+
+	g_manager.create([&chan, &is_end] {
+		try {
+			do {
+				int v;
+				printf("[%s] ############ tid:%d, cid:%d, ready to read\n", date_ms().c_str(), gettid(), getcid());
+				chan >> v;
+				printf("[%s] ############ tid:%d, cid:%d, read value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
+			} while (1);
+		} catch (string& ex) {
+			printf("ex:%s\n", ex.c_str());
+		}
+		is_end = true;
+		printf("[%s] ############ tid:%d, cid:%d, is end\n", date_ms().c_str(), gettid(), getcid());
+	});
+
+	while (!is_end) {
+		usleep(100 * 1000);
+	}
+	printf("[%s] ############ all finish\n", date_ms().c_str());
 }
