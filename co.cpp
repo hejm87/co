@@ -104,6 +104,14 @@ void CoSchedule::yield()
 	switch_to_main();
 }
 
+void CoSchedule::sleep(unsigned int msec)
+{
+	auto id = _running_id;
+
+	xxxx
+
+}
+
 void CoSchedule::switch_to_main()
 {
 	assert(_running_id != -1);
@@ -134,6 +142,8 @@ CoManager::CoManager()
 			ptr->run();
 		});
 	}
+
+//	_timer.init(TIMER_THREAD_SIZE);
 }
 
 CoManager::~CoManager()
@@ -181,6 +191,16 @@ shared_ptr<Coroutine> CoManager::create_with_co(const function<void()>& func)
 		co->_func  = func;
 	}
 	return co;
+}
+
+void CoManager::sleep(unsigned int sec)
+{
+	sleep_ms(sec * 1000);
+}
+
+void CoManager::sleep_ms(unsigned int sec)
+{
+	xxxx
 }
 
 shared_ptr<Coroutine> CoManager::get_co(int id)
@@ -259,17 +279,6 @@ bool CoManager::resume_co(int id)
 	return true;
 }
 
-//bool CoManager::remove_suspend(int id)
-//{
-//	lock_guard<mutex> lock(_mutex);
-//	auto iter = _map_suspend.find(id);
-//	if (iter == _map_suspend.end()) {
-//		return false;
-//	}
-//	_map_suspend.erase(id);
-//	return true;
-//}
-
 mutex* CoManager::get_locker()
 {
 	return &_mutex;
@@ -279,16 +288,10 @@ void CoManager::co_run(int id)
 {
 	auto co = g_manager.get_co(id);
 
-//	printf("++++++++++++ uthread_func, tid:%d, cid:%d, beg\n", gettid(), co->_id);
 	co->_func();
-//	printf("------------ uthread_func, tid:%d, cid:%d, end\n", gettid(), co->_id);
 
 	co->_state = FREE;
 	co->_init  = false;
 	
-//	g_schedule->_lst_free.push_back(co);
-//	g_schedule->_running_id = -1;
-//	printf("------------ uthread_func, tid:%d, cid:%d, ready to change\n", gettid(), co->_id);
-
 	swapcontext(&(co->_ctx), &(g_schedule->_main_ctx));
 }

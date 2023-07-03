@@ -28,7 +28,7 @@ void CoMutex::lock()
 		}
 
 		shared_ptr<Coroutine> co;
-		if (g_schedule) {
+		if (is_in_co_env()) {
 			co = g_manager.get_running_co();
 		} else {
 			co = g_manager.create_with_co([this] {
@@ -45,7 +45,7 @@ void CoMutex::lock()
 		g_manager.add_suspend_co(co);
 		g_schedule->switch_to_main();
 
-		if (g_schedule) {
+		if (is_in_co_env()) {
 			g_schedule->switch_to_main();
 		} else {
 			unique_lock<mutex> lock(_mutex_no_co_env);

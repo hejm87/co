@@ -20,12 +20,14 @@
 #include <sys/syscall.h>
 
 #include "common/any.h"
+//#include "common/timer.h"
 
 using namespace std;
 
 const int DEFAULT_STACK_SZIE = 8 * 1024;
 const int MAX_COROUTINE_SIZE = 2;
 const int CO_THREAD_SIZE = 2;
+const int TIMER_THREAD_SIZE = 2;
 
 enum CoState
 {
@@ -87,6 +89,8 @@ public:
 
 	void yield();
 
+	void sleep(unsigned int msec);
+
 	void switch_to_main();
 
 private:
@@ -95,6 +99,8 @@ private:
 public:
 	vector<shared_ptr<Coroutine>> _lst_free;
 	vector<shared_ptr<Coroutine>> _lst_ready;
+
+	multimap<long, int> _lst_sleep;
 
 	ucontext_t _main_ctx;
 
@@ -111,6 +117,10 @@ public:
 
 	shared_ptr<Coroutine> create_with_co(const function<void()>& func);
 
+	void sleep(unsigned int sec);
+
+	void sleep_ms(unsigned int sec);
+
 	shared_ptr<Coroutine> get_co(int id);
 
 	shared_ptr<Coroutine> get_running_co();
@@ -121,13 +131,11 @@ public:
 
 	void add_free_co(const vector<shared_ptr<Coroutine>>& cos);
 
-	void add_ready_co(const shared_ptr<Coroutine>& co);
+	void add_ready_co(const shared_ptr<Coroutine>& co, bool priority = false);
 
 	void add_suspend_co(const shared_ptr<Coroutine>& co);
 
 	bool resume_co(int id);
-
-//	bool remove_suspend(int id);
 
 	void lock();
 
@@ -147,6 +155,8 @@ private:
 
 	map<int, shared_ptr<Coroutine>> _map_suspend;
 
+//	Timer _timer;
+
 	vector<thread> _threads;
 
 	mutex _mutex;
@@ -164,6 +174,12 @@ inline int getcid()
 inline int gettid()
 {
 	return syscall(SYS_gettid);
+}
+
+// 是否在协程线程环境
+inline bool is_in_co_env()
+{
+	return g_schedule ? true : false;
 }
 
 #endif
