@@ -109,6 +109,8 @@ public:
 
 	bool create(const function<void()>& func);
 
+	shared_ptr<Coroutine> create_with_co(const function<void()>& func);
+
 	shared_ptr<Coroutine> get_co(int id);
 
 	shared_ptr<Coroutine> get_running_co();

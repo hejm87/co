@@ -164,6 +164,25 @@ bool CoManager::create(const function<void()>& func)
 	return true;
 }
 
+shared_ptr<Coroutine> CoManager::create_with_co(const function<void()>& func)
+{
+	shared_ptr<Coroutine> co;
+
+	lock_guard<mutex> lock(_mutex);
+
+	if (_lst_free.size()) {
+
+		co = _lst_free.front();
+
+		_lst_free.erase(_lst_free.begin());
+		_lst_ready.push_back(co);
+
+		co->_state = RUNNABLE;	
+		co->_func  = func;
+	}
+	return co;
+}
+
 shared_ptr<Coroutine> CoManager::get_co(int id)
 {
 	shared_ptr<Coroutine> co;

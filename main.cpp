@@ -19,6 +19,7 @@ void reuse_test();
 void exception_test();
 void yield_test();
 void lock_test();
+void lock_test1();
 void channel_test();
 
 int main()
@@ -27,7 +28,8 @@ int main()
 //	exception_test();
 //	yield_test();
 //	lock_test();
-	channel_test();
+	lock_test1();
+//	channel_test();
 	return 0;
 }
 
@@ -116,6 +118,28 @@ void lock_test()
 	usleep(100 * 1000);
 	printf("[%s] after wait, a1:%d, a2:%d\n", date_ms().c_str(), co_count * loop, total);
 	assert(co_count * loop == total);
+}
+
+void lock_test1()
+{
+	CoMutex mutex;
+
+	mutex.lock();
+
+	g_manager.create([&mutex] {
+		mutex.lock();
+		printf("[%s] ############### tid:%d, cid:%d, lock\n", date_ms().c_str(), gettid(), getcid());
+	});
+
+	g_manager.create([&mutex] {
+		usleep(200 * 1000);
+		printf("[%s] ############### tid:%d, cid:%d, ready to unlock\n", date_ms().c_str(), gettid(), getcid());
+		mutex.unlock();
+		printf("[%s] ############### tid:%d, cid:%d, unlock\n", date_ms().c_str(), gettid(), getcid());
+	});
+
+	sleep(1);
+	printf("[%s] ############### all finish\n", date_ms().c_str());
 }
 
 void channel_test()

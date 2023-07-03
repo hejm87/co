@@ -16,14 +16,10 @@ CoMutex::~CoMutex()
 void CoMutex::lock()
 {
 	auto is_wake_up = false;
-	auto co = g_manager.get_running_co();
-	assert(co);
 
 	do {
 		int expect = 0;
 		if (_value.compare_exchange_strong(expect, 1)) {
-			_lock_co = co;
-			assert(_lock_co);
 			return ;
 		}
 
@@ -31,11 +27,30 @@ void CoMutex::lock()
 			continue ;
 		}
 
+		shared_ptr<Coroutine> co;
+		if (g_schedule) {
+			co = g_manager.get_running_co();
+		} else {
+			co = g_manager.create_with_co([this] {
+				_cv_no_co_env.notify_one();
+			});
+		}
+		assert(co);
+		
 		co->_state = SUSPEND;
 		co->_suspend_state = SUSPEND_LOCK;
+
 		is_wake_up ? _block_list.push_front(co) : _block_list.push_back(co);
+
 		g_manager.add_suspend_co(co);
 		g_schedule->switch_to_main();
+
+		if (g_schedule) {
+			g_schedule->switch_to_main();
+		} else {
+			unique_lock<mutex> lock(_mutex_no_co_env);
+			_cv_no_co_env.wait(lock, [] {return true;});
+		}
 
 		is_wake_up = true;
 
@@ -47,31 +62,13 @@ void CoMutex::unlock()
 	if (!_value.load()) {
 		return ;
 	}
-	auto cur_co = g_manager.get_running_co();
-	assert(cur_co);
-	if (_value.load() && _lock_co != cur_co) {
-		THROW_EXCEPTION(
-			"CoMutex unlock, _value:%d, _lock_co.cid:%d, cur_co.cid:%d", 
-			_value.load(),
-			_lock_co->_id,
-			cur_co->_id
-		);
-	}
 
-	_lock_co = nullptr;
 	_value.store(0);
 
 	if (_block_list.size() > 0) {
 
 		auto resume_co = _block_list.front();
 		_block_list.pop_front();
-
-	//	assert(g_manager.remove_suspend(resume_co->_id));
-
-	//	resume_co->_state = RUNNABLE;
-	//	resume_co->_suspend_state = SUSPEND_NONE;
-
-	//	g_manager.add_ready_co(resume_co);
 
 		auto ret = g_manager.resume_co(resume_co->_id);
 		assert(ret);
