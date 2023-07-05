@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <sys/time.h>
 
 #include <string>
@@ -15,6 +16,15 @@ using namespace std;
 	snprintf(ex, sizeof(ex), "[FILE:%s,LINE:%d] exception:" fmt, __FILE__, __LINE__, ##__VA_ARGS__); \
 	throw string(ex); \
 }
+
+#define now() time(0)
+
+#define now_ms() \
+({ \
+	struct timeval tv; \
+	gettimeofday(&tv, NULL); \
+	(tv.tv_sec * 1000 + tv.tv_usec / 1000); \
+})
 
 inline std::string date_ms(long time_ms = 0) {
     char date[32];

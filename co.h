@@ -89,8 +89,6 @@ public:
 
 	void yield();
 
-	void sleep(unsigned int msec);
-
 	void switch_to_main();
 
 private:
@@ -99,8 +97,6 @@ private:
 public:
 	vector<shared_ptr<Coroutine>> _lst_free;
 	vector<shared_ptr<Coroutine>> _lst_ready;
-
-	multimap<long, int> _lst_sleep;
 
 	ucontext_t _main_ctx;
 
@@ -119,7 +115,7 @@ public:
 
 	void sleep(unsigned int sec);
 
-	void sleep_ms(unsigned int sec);
+	void sleep_ms(unsigned int msec);
 
 	shared_ptr<Coroutine> get_co(int id);
 
@@ -155,7 +151,7 @@ private:
 
 	map<int, shared_ptr<Coroutine>> _map_suspend;
 
-//	Timer _timer;
+	multimap<long, int> _lst_sleep;
 
 	vector<thread> _threads;
 

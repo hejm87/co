@@ -104,14 +104,6 @@ void CoSchedule::yield()
 	switch_to_main();
 }
 
-void CoSchedule::sleep(unsigned int msec)
-{
-	auto id = _running_id;
-
-	xxxx
-
-}
-
 void CoSchedule::switch_to_main()
 {
 	assert(_running_id != -1);
@@ -142,8 +134,6 @@ CoManager::CoManager()
 			ptr->run();
 		});
 	}
-
-//	_timer.init(TIMER_THREAD_SIZE);
 }
 
 CoManager::~CoManager()
@@ -198,9 +188,24 @@ void CoManager::sleep(unsigned int sec)
 	sleep_ms(sec * 1000);
 }
 
-void CoManager::sleep_ms(unsigned int sec)
+void CoManager::sleep_ms(unsigned int msec)
 {
-	xxxx
+	if (!is_in_co_env()) {
+		usleep(msec * 1000);
+		return ;
+	}
+
+	auto co = get_running_co();
+	co->_state = SUSPEND;
+	co->_suspend_state = SUSPEND_SLEEP;
+
+	{
+		lock_guard<mutex> lock(_mutex);
+		_map_suspend[co->_id] = co;	
+		_lst_sleep.insert(make_pair(now_ms() + msec, co->_id));
+	}
+
+	g_schedule->switch_to_main();
 }
 
 shared_ptr<Coroutine> CoManager::get_co(int id)
@@ -224,8 +229,21 @@ shared_ptr<Coroutine> CoManager::get_running_co()
 
 shared_ptr<Coroutine> CoManager::get_ready_co()
 {
+//	printf("[%s] +++++++++++++ co_manager, tid:%d, get_ready_co, sleep.size:%ld\n", date_ms().c_str(), gettid(), _lst_sleep.size());
 	shared_ptr<Coroutine> co;
 	lock_guard<mutex> lock(_mutex);
+	// 唤醒睡眠协程 
+	auto now = now_ms();
+	auto beg_iter = _lst_sleep.begin();
+	if (_lst_sleep.size() > 0 && beg_iter->first <= now) {
+		auto end_iter = _lst_sleep.lower_bound(now);
+		for (auto iter = beg_iter; iter != end_iter; iter++) {
+			_lst_ready.push_front(_lst_co[iter->second]);
+		}
+		_lst_sleep.erase(beg_iter, end_iter);
+	}
+
+	// 获取第一个就绪协程
 	if (_lst_ready.size() > 0) {
 		co = _lst_ready.front();
 		_lst_ready.erase(_lst_ready.begin());
@@ -248,10 +266,14 @@ void CoManager::add_free_co(const vector<shared_ptr<Coroutine>>& cos)
 	}
 }
 
-void CoManager::add_ready_co(const shared_ptr<Coroutine>& co)
+void CoManager::add_ready_co(const shared_ptr<Coroutine>& co, bool priority)
 {
 	lock_guard<mutex> lock(_mutex);
-	_lst_ready.push_back(co);
+	if (priority) {
+		_lst_ready.push_front(co);
+	} else {
+		_lst_ready.push_back(co);
+	}
 }
 
 void CoManager::add_suspend_co(const shared_ptr<Coroutine>& co)

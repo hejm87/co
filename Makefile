@@ -16,4 +16,4 @@ all:
 	g++ -std=c++11 -o main main.o co.o co_mutex.o -lpthread
 
 clean:
-	rm -f co.o main.o main
+	rm -f *.o main

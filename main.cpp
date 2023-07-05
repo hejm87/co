@@ -21,6 +21,7 @@ void yield_test();
 void lock_test();
 void lock_test1();
 void channel_test();
+void sleep_test();
 
 int main()
 {
@@ -28,8 +29,9 @@ int main()
 //	exception_test();
 //	yield_test();
 //	lock_test();
-	lock_test1();
+//	lock_test1();
 //	channel_test();
+	sleep_test();
 	return 0;
 }
 
@@ -177,4 +179,31 @@ void channel_test()
 		usleep(100 * 1000);
 	}
 	printf("[%s] ############ all finish\n", date_ms().c_str());
+}
+
+void sleep_test()
+{
+	const int SLEEP_MS = 500;
+
+	atomic<bool> is_set(false);
+
+	auto beg = now_ms();
+
+	g_manager.create([&is_set, SLEEP_MS] {
+		printf("[%s] ############ tid:%d, cid:%d, before sleep\n", date_ms().c_str(), gettid(), getcid());
+		g_manager.sleep_ms(SLEEP_MS);
+		printf("[%s] ############ tid:%d, cid:%d, after sleep\n", date_ms().c_str(), gettid(), getcid());
+		is_set = true;
+	});
+
+	while (!is_set) {
+		usleep(1000);
+	}
+
+	auto end = now_ms();
+
+	printf("cost:%ldms\n", end - beg);
+
+	assert(end - beg >= 500);
+	assert(end - beg < 550);
 }
