@@ -26,6 +26,16 @@ using namespace std;
 	(tv.tv_sec * 1000 + tv.tv_usec / 1000); \
 })
 
+template <class T>
+class Singleton
+{
+public:
+	static T* get_instance() {
+		static T obj;
+		return &obj;
+	}
+};
+
 inline std::string date_ms(long time_ms = 0) {
     char date[32];
     time_t sec;
@@ -45,7 +55,7 @@ inline std::string date_ms(long time_ms = 0) {
     snprintf(
         date,
         sizeof(date),
-        "%04d-%02d-%02d_%02d:%02d:%02d.%ld",
+        "%04d-%02d-%02d_%02d:%02d:%02d.%03ld",
         tmTime.tm_year + 1900,
         tmTime.tm_mon + 1,
         tmTime.tm_mday,

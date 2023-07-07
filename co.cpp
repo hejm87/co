@@ -1,6 +1,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include "co.h"
+#include "co_timer.h"
 #include "utils.h"
 
 CoManager g_manager;
@@ -52,7 +53,7 @@ void CoSchedule::run()
 
 		if (!co->_init) {
 
-			printf("[%s] ++++++++++ co_schedule, schedule1, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
+		//	printf("[%s] ++++++++++ co_schedule, schedule1, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
 
 			co->_init = true;
 
@@ -68,13 +69,6 @@ void CoSchedule::run()
 
 		_running_id = co->_id;
 
-		printf(
-			"[%s] ++++++++++ co_schedule, schedule switch co, tid:%d, cid:%d\n", 
-			date_ms().c_str(),
-			gettid(),
-			getcid()
-		);
-
 		swapcontext(&_main_ctx, &(co->_ctx));
 
 		_running_id = -1;
@@ -89,9 +83,11 @@ void CoSchedule::run()
 			printf("[%s] ++++++++++ co_schedule, co_suspend, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
 			g_manager.add_suspend_co(co);
 		}
-	
-		// for test yield, other thread process
-	//	usleep(10 * 1000);
+
+		if (_do_after_switch_func) {
+			_do_after_switch_func();
+			_do_after_switch_func = nullptr;
+		}
 	}
 	printf("co_schedule, tid:%d, thread end\n", gettid());
 }
@@ -104,20 +100,37 @@ void CoSchedule::yield()
 	switch_to_main();
 }
 
-void CoSchedule::switch_to_main()
+void CoSchedule::resume(shared_ptr<Coroutine> co)
+{
+	_lst_resume.push_back(co);
+}
+
+void CoSchedule::switch_to_main(const function<void()>& do_after_switch_func)
 {
 	assert(_running_id != -1);
-	swapcontext(&(g_manager.get_co(_running_id)->_ctx), &_main_ctx);
+	_do_after_switch_func = do_after_switch_func;
+
+	auto co = g_manager.get_co(_running_id);
+	swapcontext(&(co->_ctx), &_main_ctx);
 }
 
 void CoSchedule::process()
 {
+	// 将空闲协程放回g_manager
+	g_manager.add_free_co(_lst_free);
+	_lst_free.clear();
+
+	// 将待resume协程放回g_manager
+	for (auto& co : _lst_resume) {
+		g_manager.add_ready_co(co);
+	}
+	_lst_resume.clear();
+
+	// 从g_manager获取就绪协程
 	auto co = g_manager.get_ready_co();
 	if (co) {
 		_lst_ready.push_back(co);
 	}
-	g_manager.add_free_co(_lst_free);
-	_lst_free.clear();
 }
 
 CoManager::CoManager()
@@ -210,10 +223,17 @@ void CoManager::sleep_ms(unsigned int msec)
 
 shared_ptr<Coroutine> CoManager::get_co(int id)
 {
+	assert(id >= 0);
+	assert(id < (int)_lst_co.size());
+	return _lst_co[id];
+}
+
+shared_ptr<Coroutine> CoManager::get_free_co()
+{
 	shared_ptr<Coroutine> co;
-	if (id < (int)_lst_co.size()) {
-		co = _lst_co[id];
-	}
+	lock_guard<mutex> lock(_mutex);
+	co = _lst_free.front();
+	_lst_free.pop_front();
 	return co;
 }
 
@@ -229,9 +249,23 @@ shared_ptr<Coroutine> CoManager::get_running_co()
 
 shared_ptr<Coroutine> CoManager::get_ready_co()
 {
-//	printf("[%s] +++++++++++++ co_manager, tid:%d, get_ready_co, sleep.size:%ld\n", date_ms().c_str(), gettid(), _lst_sleep.size());
+	// 获取定时器任�?
+	auto expires = Singleton<CoTimer>::get_instance()->get_expires();
+	for (auto& func : expires) {
+		if (!create(func)) {
+			Singleton<CoTimer>::get_instance()->set(0, func);
+			break ;
+		}
+	}
+
+//	if (expires.size() > 0) {
+//		printf("[%s] +++++++++++++ co_manager, get_ready_co, expires.size:%ld\n", date_ms().c_str(), expires.size());
+//	}
+
 	shared_ptr<Coroutine> co;
+
 	lock_guard<mutex> lock(_mutex);
+
 	// 唤醒睡眠协程 
 	auto now = now_ms();
 	auto beg_iter = _lst_sleep.begin();
@@ -243,13 +277,13 @@ shared_ptr<Coroutine> CoManager::get_ready_co()
 		_lst_sleep.erase(beg_iter, end_iter);
 	}
 
-	// 获取第一个就绪协程
+	// 获取�?一�?就绪协程
 	if (_lst_ready.size() > 0) {
 		co = _lst_ready.front();
 		_lst_ready.erase(_lst_ready.begin());
-		printf("[%s] +++++++++++++ co_manager, get_ready_co, cid:%d\n", date_ms().c_str(), co->_id);
+	//	printf("[%s] +++++++++++++ co_manager, get_ready_co, cid:%d\n", date_ms().c_str(), co->_id);
 	}
-	return co;	
+	return co;
 }
 
 void CoManager::add_free_co(const shared_ptr<Coroutine>& co)
@@ -296,8 +330,11 @@ bool CoManager::resume_co(int id)
 	co->_state = RUNNABLE;
 	co->_suspend_state = SUSPEND_NONE;
 
-	_lst_ready.push_front(co);
-
+	if (g_schedule) {
+		g_schedule->resume(co);
+	} else {
+		_lst_ready.push_front(co);
+	}
 	return true;
 }
 

@@ -7,6 +7,9 @@
 #include <condition_variable>
 
 #include <list>
+#include <set>
+
+#include "common/semaphore.h"
 
 using namespace std;
 
@@ -24,36 +27,20 @@ public:
 
 	void lock();
 
-//	bool try_lock();
-	
 	void unlock();
 
 private:
+	// 持有锁id(29)|是否协程环境上锁(1)|锁内操作(1)|是否上锁(1)
 	atomic<int> _value;
-//	shared_ptr<Coroutine> _lock_co;
 	list<shared_ptr<Coroutine>> _block_list;
 
-	mutex _mutex_no_co_env;
-	condition_variable _cv_no_co_env;
-};
+	mutex _mutex;
 
-//template <class T>
-//class CoLockGuard
-//{
-//public:
-//	CoLockGuard(const CoLockGuard&) = delete;
-//
-//	explicit CoLockGuard(T& obj) {
-//		_obj = obj;
-//		_obj.lock();
-//	}
-//
-//	~CoLockGuard() {
-//		_obj.unlock();
-//	}
-//
-//private:
-//	T _obj;
-//};
+	semaphore* _sem;
+
+//	mutex _mutex_no_co_env;
+//	condition_variable _cv_no_co_env;
+//	set<int> _set_flag_no_co_env;
+};
 
 #endif

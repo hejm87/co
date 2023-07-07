@@ -3,7 +3,11 @@
 
 #include "co.h"
 #include "co_mutex.h"
+#include "common/semaphore.h"
 #include "utils.h"
+
+#include <mutex>
+#include <condition_variable>
 
 template <class T>
 class CoChannel
@@ -13,19 +17,24 @@ public:
 		printf("!!!!!!!!!!!!!! CoChannel(), ptr:%p\n", this);
 		_closed = false;
 		_max_size = size;
+		_sem_send = new semaphore(0);
+		_sem_recv = new semaphore(0);
 	}
 
 	~CoChannel() {
 		printf("!!!!!!!!!!!!!! ~CoChannel(), ptr:%p\n", this);
 		close();
+		delete _sem_send;
+		delete _sem_recv;
 	}
 
 	void close() {
 		_mutex.lock();
-		if (!_closed) {
+		if (_closed) {
 			_mutex.unlock();
+			return ;
 		}
-		_closed = false;
+		_closed = true;
 		_mutex.unlock();
 
 		for (auto& item : _lst_send_waits) {
@@ -39,13 +48,6 @@ public:
 	}
 
 	void operator>>(T& obj) {
-		{
-			_mutex.lock();
-			if (_closed) {
-				THROW_EXCEPTION("channel close");
-			}
-			_mutex.unlock();
-		}
 		if (!_max_size) {
 			recv_without_cache(obj);
 		} else {
@@ -54,13 +56,6 @@ public:
 	}
 
 	void operator<<(const T& obj) {
-		{
-			_mutex.lock();
-			if (_closed) {
-				THROW_EXCEPTION("channel close");
-			}
-			_mutex.unlock();
-		}
 		if (!_max_size) {
 			send_without_cache(obj);
 		} else {
@@ -69,156 +64,152 @@ public:
 	}
 
 	void send_without_cache(const T& obj) {
+
 		_mutex.lock();
-		if (_lst_recv_waits.size() > 0) {
 
-			printf("[%s] cccccccccc, send_without_cache, path1, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), getcid());
-
-			auto co = _lst_recv_waits.front();
-			_lst_recv_waits.pop_front();
-
-			co->_channel_param.param = obj;
-			printf(
-				"[%s] cccccccccc, send_without_cache, path1, tid:%d, cid:%d, set obj, resume_cid:%d\n", 
-				date_ms().c_str(), 
-				gettid(), 
-				getcid(), 
-				co->_id
-			);
-
+		if (_closed) {
 			_mutex.unlock();
+			THROW_EXCEPTION("channel close");
+		}
 
-			g_manager.resume_co(co->_id);
+		shared_ptr<Coroutine> cur_co;
+		if (is_in_co_env()) {
+			cur_co = g_manager.get_running_co();
 		} else {
+			cur_co = g_manager.get_free_co();
+			cur_co->_func = [this] {
+				_sem_send->signal();
+			};
+		}
 
-			printf("[%s] cccccccccc, send_without_cache, path2, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), getcid());
+		// lock放下面有被lock重置co._state问题，后续需要优化代码
+		// 这种显式设置协程状态的模式需要去除
+		assert(cur_co);
+		cur_co->_state = SUSPEND;
+		cur_co->_channel_param.type = CHANNEL_BLOCK_SEND;
+		cur_co->_channel_param.param = obj;
 
-			auto cur_co = g_manager.get_running_co();
-			assert(cur_co);
+		_lst_send_waits.push_back(cur_co);
 
-			cur_co->_state = SUSPEND;
-			cur_co->_channel_param.type = CHANNEL_BLOCK_SEND;
-			cur_co->_channel_param.param = obj;
+		printf(
+			"[%s] ccccccccccccccc, send_without_cache, suspend, tid:%d, cid:%d, _lst_send_waits.size:%ld\n", 
+			date_ms().c_str(),
+			gettid(),
+			getcid(),
+			_lst_send_waits.size()
+		);
 
-			_lst_send_waits.push_back(cur_co);
+		if (_lst_recv_waits.size() > 0) {
+			auto resume_co = _lst_recv_waits.front();
+			_lst_recv_waits.pop_front();
+			// for test
+			assert(cur_co->_id != resume_co->_id);
 
-			printf(
-				"[%s] cccccccccc, send_without_cache, path2, tid:%d, cid:%d, suspend to wait\n", 
-				date_ms().c_str(), 
-				gettid(), 
-				getcid()
-			);
+			g_manager.resume_co(resume_co->_id);
+		}
 
-			g_manager.add_suspend_co(cur_co);
-
-			_mutex.unlock();
-
-			g_schedule->switch_to_main();
-
-			printf(
-				"[%s] cccccccccc, send_without_cache, path2, tid:%d, cid:%d, wake up\n", 
-				date_ms().c_str(),
-				gettid(),
-				getcid()
-			);
-
-			_mutex.lock();
-			if (_closed) {
+		if (is_in_co_env()) {
+			g_schedule->switch_to_main([this] {
 				_mutex.unlock();
-				THROW_EXCEPTION("channel close");
-			}
+			});
+		} else {
+			g_manager.add_suspend_co(cur_co);
 			_mutex.unlock();
+			_sem_send->wait();
+		}
 
-			cur_co->_channel_param.type = CHANNEL_BLOCK_NULL;
-			cur_co->_channel_param.param.Reset();
+		if (_closed) {
+			THROW_EXCEPTION("channel close");
+		}
+		if (is_in_co_env()) {
+			if (cur_co->_channel_param.type != CHANNEL_BLOCK_NULL) {
+				printf(
+					"[%s] ccccccccccccccc, tid:%d, cid:%d, channel_param_type:%d\n", 
+					date_ms().c_str(),
+					gettid(),
+					getcid(),
+					cur_co->_channel_param.type
+				);
+			}
+			assert(cur_co->_channel_param.type == CHANNEL_BLOCK_NULL);
 		}
 	}
 
 	void recv_without_cache(T& obj) {
+
 		_mutex.lock();
-		if (_lst_send_waits.size() > 0) {
 
-			printf(
-				"[%s] cccccccccc, recv_without_cache, path1, tid:%d, cid:%d, get obj now\n", 
-				date_ms().c_str(),
-				gettid(),
-				getcid()
-			);
-
-			auto co = _lst_send_waits.front();
-			_lst_send_waits.pop_front();
-
-			if (co->_channel_param.type != CHANNEL_BLOCK_SEND) {
-				THROW_EXCEPTION("channel inner exception, type:%d", (int)co->_channel_param.type);
-			}
-
-			obj = co->_channel_param.param.AnyCast<T>();
-			co->_channel_param.param.Reset();
-
-			printf(
-				"[%s] cccccccccc, recv_without_cache, path1, tid:%d, cid:%d, resume cid:%d\n", 
-				date_ms().c_str(),
-				gettid(),
-				getcid(),
-				co->_id
-			);
-
+		if (_closed) {
 			_mutex.unlock();
-
-			g_manager.resume_co(co->_id);
-		} else {
-
-			printf(
-				"[%s] cccccccccc, recv_without_cache, path2, tid:%d, cid:%d, get obj\n", 
-				date_ms().c_str(),
-				gettid(),
-				getcid()
-			);
-
-			auto cur_co = g_manager.get_running_co();
-
-			cur_co->_state = SUSPEND;
-			cur_co->_channel_param.type = CHANNEL_BLOCK_RECV;
-			cur_co->_channel_param.param.Reset();
-
-			_lst_recv_waits.push_back(cur_co);
-
-			g_manager.add_suspend_co(cur_co);
-
-			_mutex.unlock();
-
-			printf(
-				"[%s] cccccccccc, recv_without_cache, path2, tid:%d, cid:%d, suspend to wait\n", 
-				date_ms().c_str(),
-				gettid(),
-				getcid()
-			);
-
-			g_schedule->switch_to_main();
-
-			_mutex.lock();
-
-			if (_closed) {
-				_mutex.unlock();
-				THROW_EXCEPTION("channel close");
-			}
-
-			_mutex.unlock();
-
-			printf(
-				"[%s] cccccccccc, recv_without_cache, path2, tid:%d, cid:%d, wake up\n", 
-				date_ms().c_str(),
-				gettid(),
-				getcid()
-			);
-
-			if (cur_co->_channel_param.param.IsNull()) {
-				THROW_EXCEPTION("channel inner exception");
-			}
-
-			obj = cur_co->_channel_param.param.AnyCast<T>();
-			cur_co->_channel_param.param.Reset();
+			THROW_EXCEPTION("channel close");
 		}
+
+		if (!_lst_send_waits.size()) {
+
+			do {
+				shared_ptr<Coroutine> cur_co;
+				if (is_in_co_env()) {
+					cur_co = g_manager.get_running_co();
+				} else {
+					cur_co = g_manager.get_free_co();
+					cur_co->_func = [this] {
+						_sem_recv->signal();
+					};
+				}
+
+				assert(cur_co);
+				cur_co->_state = SUSPEND;
+				cur_co->_channel_param.type = CHANNEL_BLOCK_RECV;
+				cur_co->_channel_param.param.Reset();
+
+				_lst_recv_waits.push_back(cur_co);
+
+				printf(
+					"[%s] ccccccccccccccc, recv_without_cache, suspend because no send waits, tid:%d, cid:%d\n",
+					date_ms().c_str(),
+					gettid(),
+					getcid()
+				);
+
+				if (is_in_co_env()) {
+					g_schedule->switch_to_main([this] {
+						_mutex.unlock();
+					});
+				} else {
+					g_manager.add_suspend_co(cur_co);
+					_mutex.unlock();
+					_sem_recv->wait();
+				}
+
+				if (_closed) {
+					THROW_EXCEPTION("channel close");
+				}
+				_mutex.lock();
+				// 虽然被唤醒了，但是又可能被其他协程抢占了
+				if (_lst_send_waits.size() > 0) {
+					break ;
+				}
+			} while (1);
+		}
+
+		auto resume_co = _lst_send_waits.front();
+		_lst_send_waits.pop_front();
+
+		obj = resume_co->_channel_param.param.AnyCast<T>();
+		resume_co->_channel_param.type = CHANNEL_BLOCK_NULL;
+		resume_co->_channel_param.param.Reset();
+
+		printf(
+			"[%s] ccccccccccccccc, recv_without_cache, wake up and resume send waits, tid:%d, cid:%d, resume_cid:%d, channel_param_type:%d\n", 
+			date_ms().c_str(),
+			gettid(),
+			getcid(),
+			resume_co->_id,
+			resume_co->_channel_param.type
+		);
+
+		g_manager.resume_co(resume_co->_id);
+		_mutex.unlock();
 	}
 
 private:
@@ -232,6 +223,9 @@ private:
 	list<T> _queue;
 
 	CoMutex _mutex;
+
+	semaphore*	_sem_send;
+	semaphore*	_sem_recv;
 };
 
 #endif
