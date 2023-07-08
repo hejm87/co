@@ -9,6 +9,7 @@
 #include "co.h"
 #include "co_mutex.h"
 #include "co_channel.h"
+#include "co_semaphore.h"
 #include "co_timer.h"
 #include "utils.h"
 
@@ -27,6 +28,8 @@ void lock_test1();
 void channel_test();
 void channel_test1();
 void channel_test2();
+void semaphore_test();
+void semaphore_test1();
 void sleep_test();
 void timer_test();
 
@@ -39,7 +42,9 @@ int main()
 //	lock_test1();
 //	channel_test();
 //	channel_test1();
-	channel_test2();
+//	channel_test2();
+//	semaphore_test();
+	semaphore_test1();
 //	sleep_test();
 //	timer_test();
 	return 0;
@@ -325,6 +330,137 @@ void channel_test2()
 	}
 
 	printf("recv_count:%d\n", recv_count);
+	assert(recv_count == LOOP);
+}
+
+void semaphore_test()
+{
+	const int LOOP = 1000;
+
+	long beg_ms, end_ms;
+	
+	atomic<int>  count(0);
+	atomic<int>  end_count(0);
+	atomic<bool> set_end(false);
+	CoSemaphore sem(0);
+
+	printf("sem_value:%d\n", sem.get_value());
+
+	beg_ms = now_ms();
+
+	g_manager.create([&sem] {
+		for (int i = 0; i < LOOP; i++) {
+		//	printf("[%s] ############### tid:%d, cid:%d, before signal\n", date_ms().c_str(), gettid(), getcid());
+			sem.signal();
+		//	printf("[%s] ############### tid:%d, cid:%d, after signal\n", date_ms().c_str(), gettid(), getcid());
+			usleep(2 * 1000);
+		}
+	});
+
+	for (int i = 0; i < 2; i++) {
+		g_manager.create([&sem, &count, &set_end, &end_count, i] {
+			do {
+			//	printf("[%s] ############### tid:%d, cid:%d, before wait\n", date_ms().c_str(), gettid(), getcid());
+				sem.wait();
+			//	printf("[%s] ############### tid:%d, cid:%d, after wait\n", date_ms().c_str(), gettid(), getcid());
+				if (set_end) {
+					break ;
+				}
+				count++;
+			} while (1);
+			printf("[%s] ############### tid:%d, cid:%d, end\n", date_ms().c_str(), gettid(), getcid());
+			end_count++;
+		});
+	}
+
+	while (count < LOOP) {
+		usleep(10 * 1000);
+	}
+
+	set_end = true;
+	sem.signal();
+	sem.signal();
+
+	while (end_count < 2) {
+		usleep(10 * 1000);
+	}
+
+	end_ms = now_ms();
+
+	printf("all finish, count:%d, cost:%ldms\n", count.load(), end_ms - beg_ms);
+	assert(count == LOOP);
+}
+
+void semaphore_test1()
+{
+	const int LOOP = 1000;
+
+	long beg_ms, end_ms;
+
+	atomic<int> send_count(LOOP);
+	atomic<int> recv_count(0);
+	atomic<int> end_count(0);
+	atomic<bool> set_end(false);
+
+	CoSemaphore sem;
+
+	beg_ms = now_ms();
+
+	// coroutine writer
+	g_manager.create([&sem, &send_count, &end_count, &set_end] {
+		while (--send_count >= 0) {
+			sem.signal();
+			usleep(200);
+		}
+	});
+
+	// thread writer
+	thread([&sem, &send_count, &end_count, &set_end] {
+		while (--send_count >= 0) {
+			sem.signal();
+			usleep(200);
+		}
+	}).detach();
+
+	// coroutine reader
+	g_manager.create([&sem, &recv_count, &end_count, &set_end] {
+		do {
+			sem.wait();
+			if (set_end) {
+				break ;
+			}
+			recv_count++;
+		} while (1);
+		end_count++;
+	});
+
+	// thread reader
+	thread([&sem, &recv_count, &end_count, &set_end] {
+		do {
+			sem.wait();
+			if (set_end) {
+				break ;
+			}
+			recv_count++;
+		} while (1);	
+		end_count++;
+	}).detach();
+
+	while (recv_count < LOOP) {
+		printf("[%s] ############### count:%d, LOOP:%d\n", date_ms().c_str(), recv_count.load(), LOOP);
+		usleep(100 * 1000);
+	}
+	printf("[%s] ############### LOOP is finish\n", date_ms().c_str());
+	set_end = true;
+	sem.signal();
+	sem.signal();
+
+	while (end_count < 2) {
+		usleep(1);
+	}
+//	printf("[%s] ############### end gogogo\n", date_ms().c_str());
+	end_ms = now_ms();
+	printf("all finish, count:%d, cost:%ldms\n", recv_count.load(), end_ms - beg_ms);
 	assert(recv_count == LOOP);
 }
 

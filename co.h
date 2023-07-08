@@ -88,7 +88,7 @@ public:
 
 	void yield();
 
-	void resume(shared_ptr<Coroutine> co);
+//	void resume(shared_ptr<Coroutine> co);
 
 	void switch_to_main(const function<void()>& do_after_switch_func = nullptr);
 
@@ -116,6 +116,8 @@ public:
 	bool create(const function<void()>& func);
 
 	shared_ptr<Coroutine> create_with_co(const function<void()>& func);
+
+	void yield();
 
 	void sleep(unsigned int sec);
 

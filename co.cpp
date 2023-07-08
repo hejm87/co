@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <assert.h>
+#include <sched.h>
 #include "co.h"
 #include "co_timer.h"
 #include "utils.h"
@@ -74,13 +75,13 @@ void CoSchedule::run()
 		_running_id = -1;
 
 		if (co->_state == FREE) {
-			printf("[%s] ++++++++++ co_schedule, co_exit, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
+		//	printf("[%s] ++++++++++ co_schedule, co_exit, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
 			g_manager.add_free_co(co);
 		} else if (co->_state == RUNNABLE) {
-			printf("[%s] ++++++++++ co_schedule, co_yield, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
+		//	printf("[%s] ++++++++++ co_schedule, co_yield, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
 			g_manager.add_ready_co(co);
 		} else if (co->_state == SUSPEND) {
-			printf("[%s] ++++++++++ co_schedule, co_suspend, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
+		//	printf("[%s] ++++++++++ co_schedule, co_suspend, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
 			g_manager.add_suspend_co(co);
 		}
 
@@ -100,10 +101,10 @@ void CoSchedule::yield()
 	switch_to_main();
 }
 
-void CoSchedule::resume(shared_ptr<Coroutine> co)
-{
-	_lst_resume.push_back(co);
-}
+//void CoSchedule::resume(shared_ptr<Coroutine> co)
+//{
+//	_lst_resume.push_back(co);
+//}
 
 void CoSchedule::switch_to_main(const function<void()>& do_after_switch_func)
 {
@@ -129,6 +130,12 @@ void CoSchedule::process()
 	// 从g_manager获取就绪协程
 	auto co = g_manager.get_ready_co();
 	if (co) {
+	//	printf(
+	//		"[%s] +++++++++++++++, CoSchedule::process, ready co, tid:%d, cid:%d\n", 
+	//		date_ms().c_str(),
+	//		gettid(),
+	//		co->_id	
+	//	);
 		_lst_ready.push_back(co);
 	}
 }
@@ -196,6 +203,15 @@ shared_ptr<Coroutine> CoManager::create_with_co(const function<void()>& func)
 	return co;
 }
 
+void CoManager::yield()
+{
+	if (is_in_co_env()) {
+		g_schedule->yield();
+	} else {
+		sched_yield();
+	}
+}
+
 void CoManager::sleep(unsigned int sec)
 {
 	sleep_ms(sec * 1000);
@@ -249,7 +265,7 @@ shared_ptr<Coroutine> CoManager::get_running_co()
 
 shared_ptr<Coroutine> CoManager::get_ready_co()
 {
-	// 获取定时器任�?
+	// 获取定时器任�??
 	auto expires = Singleton<CoTimer>::get_instance()->get_expires();
 	for (auto& func : expires) {
 		if (!create(func)) {
@@ -277,7 +293,7 @@ shared_ptr<Coroutine> CoManager::get_ready_co()
 		_lst_sleep.erase(beg_iter, end_iter);
 	}
 
-	// 获取�?一�?就绪协程
+	// 获取�??一�??就绪协程
 	if (_lst_ready.size() > 0) {
 		co = _lst_ready.front();
 		_lst_ready.erase(_lst_ready.begin());
@@ -330,11 +346,8 @@ bool CoManager::resume_co(int id)
 	co->_state = RUNNABLE;
 	co->_suspend_state = SUSPEND_NONE;
 
-	if (g_schedule) {
-		g_schedule->resume(co);
-	} else {
-		_lst_ready.push_front(co);
-	}
+	_lst_ready.push_front(co);
+
 	return true;
 }
 

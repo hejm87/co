@@ -17,7 +17,7 @@ using namespace std;
 	throw string(ex); \
 }
 
-#define now() time(0)
+#define now() time(NULL)
 
 #define now_ms() \
 ({ \

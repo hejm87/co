@@ -17,8 +17,8 @@ public:
 		printf("!!!!!!!!!!!!!! CoChannel(), ptr:%p\n", this);
 		_closed = false;
 		_max_size = size;
-		_sem_send = new semaphore(0);
-		_sem_recv = new semaphore(0);
+		_sem_send = new Semaphore();
+		_sem_recv = new Semaphore();
 	}
 
 	~CoChannel() {
@@ -82,8 +82,8 @@ public:
 			};
 		}
 
-		// lock放下面有被lock重置co._state问题，后续需要优化代码
-		// 这种显式设置协程状态的模式需要去除
+		// lock放下面有被lock重置co._state�?题，后续需要优化代�?
+		// 这�?�显式�?�置协程状态的模式需要去�?
 		assert(cur_co);
 		cur_co->_state = SUSPEND;
 		cur_co->_channel_param.type = CHANNEL_BLOCK_SEND;
@@ -185,7 +185,7 @@ public:
 					THROW_EXCEPTION("channel close");
 				}
 				_mutex.lock();
-				// 虽然被唤醒了，但是又可能被其他协程抢占了
+				// 虽然�?唤醒了，但是又可能�??其他协程抢占�?
 				if (_lst_send_waits.size() > 0) {
 					break ;
 				}
@@ -224,8 +224,8 @@ private:
 
 	CoMutex _mutex;
 
-	semaphore*	_sem_send;
-	semaphore*	_sem_recv;
+	Semaphore*	_sem_send;
+	Semaphore*	_sem_recv;
 };
 
 #endif

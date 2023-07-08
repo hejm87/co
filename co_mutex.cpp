@@ -6,7 +6,7 @@
 CoMutex::CoMutex()
 {
 	_value = 0;
-	_sem = new semaphore(0);
+	_sem = new Semaphore();
 }
 
 CoMutex::~CoMutex()
