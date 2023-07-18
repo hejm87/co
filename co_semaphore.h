@@ -3,8 +3,10 @@
 
 #include <memory>
 #include <list>
+#include "co_exception.h"
 #include "utils.h"
 //#include "common/semaphore.h"
+
 
 using namespace std;
 
@@ -20,9 +22,12 @@ class CoSemaphore
 public:
     CoSemaphore(int value = 0) {
         if (value > _MAX_SEM_POSITIVE || value < _MAX_SEM_NEGATIVE) {
-            THROW_EXCEPTION("CoSemaphore init value:%d out of range", value);
+            THROW_EXCEPTION(
+                CO_ERROR_PARAM_INVALID, 
+                "CoSemaphore init value:%d out of range", 
+                value
+            );
         }
-       // _sem = new Semaphore();
         _value.store(value << 1);
 
 #ifdef __SEM_DEBUG
@@ -60,8 +65,6 @@ private:
     atomic<int> _value;
 
     list<shared_ptr<Coroutine>> _lst_wait;
-
-   // Semaphore* _sem;
 
 #ifdef __SEM_DEBUG
     atomic<int> _send_count;

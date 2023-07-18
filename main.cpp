@@ -238,8 +238,8 @@ void channel_test()
 				printf("[%s] ############ tid:%d, cid:%d, read value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
 				assert(expect++ == v);
 			} while (1);
-		} catch (string& ex) {
-			printf("ex:%s\n", ex.c_str());
+		} catch (CoException& ex) {
+			printf("ex:%s\n", ex.get_desc().c_str());
 		}
 		is_end = true;
 		printf("[%s] ############ tid:%d, cid:%d, is end\n", date_ms().c_str(), gettid(), getcid());
@@ -283,8 +283,8 @@ void channel_test1()
 					mutex.unlock();	
 				//	printf("[%s] ############ cid:%d, read channel succeed, after\n", date_ms().c_str(), getcid());
 				} while (1);
-			} catch (string& ex) {
-				printf("cid:%d, ex:%s\n", getcid(), ex.c_str());
+			} catch (CoException& ex) {
+				printf("cid:%d, ex:%s\n", getcid(), ex.get_desc().c_str());
 			}
 			end_count++;
 		});
@@ -331,8 +331,8 @@ void channel_test2()
 			printf("[%s] ############### tid:%d, cid:%d, after read, value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
 			recv_count++;
 		} while (1);
-	} catch (string& ex) {
-		printf("ex:%s\n", ex.c_str());
+	} catch (CoException& ex) {
+		printf("ex:%s\n", ex.get_desc().c_str());
 	}
 
 	printf("recv_count:%d\n", recv_count);
@@ -386,8 +386,8 @@ void channel_cache_test()
 				printf("[%s] ############### tid:%d, cid:%d, final read value\n", date_ms().c_str(), gettid(), getcid());
 				chan >> v;
 				printf("[%s] ############### tid:%d, cid:%d, read value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
-			} catch (string& ex) {
-				printf("ex:%s\n", ex.c_str());
+			} catch (CoException& ex) {
+				printf("ex:%s\n", ex.get_desc().c_str());
 				break ;
 			}
 		} while (1);
@@ -430,8 +430,8 @@ void channel_cache_test1()
 					printf("[%s] ############### cid:%d, send, after value:%d\n", date_ms().c_str(), getcid(), score);
 					send_total += score;
 				}
-			} catch (string& ex) {
-				printf("[%s] ############### cid:%d, send, ex:%s\n", date_ms().c_str(), getcid(), ex.c_str());
+			} catch (CoException& ex) {
+				printf("[%s] ############### cid:%d, send, ex:%s\n", date_ms().c_str(), getcid(), ex.get_desc().c_str());
 			}
 			send_end_count++;
 			printf("[%s] ############### cid:%d, send end\n", date_ms().c_str(), getcid());
@@ -447,8 +447,8 @@ void channel_cache_test1()
 					chan >> v;
 					printf("[%s] ############### cid:%d, recv, after value:%d\n", date_ms().c_str(), getcid(), v);
 					recv_total += v;
-				} catch(string& ex) {
-					printf("[%s] ############### cid:%d, recv, ex:%s\n", date_ms().c_str(), getcid(), ex.c_str());
+				} catch (CoException& ex) {
+					printf("[%s] ############### cid:%d, recv, ex:%s\n", date_ms().c_str(), getcid(), ex.get_desc().c_str());
 					break ;
 				}
 			} while (1);

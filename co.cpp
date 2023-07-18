@@ -3,6 +3,7 @@
 #include <sched.h>
 #include "co.h"
 #include "co_timer.h"
+#include "co_exception.h"
 #include "utils.h"
 
 CoManager g_manager;
@@ -29,7 +30,7 @@ CoSchedule::CoSchedule()
 
 CoSchedule::~CoSchedule()
 {
-	printf("~CoSchedule\n");
+	;
 }
 
 void CoSchedule::run()
@@ -53,8 +54,6 @@ void CoSchedule::run()
 		_running_id = co->_id;
 
 		if (!co->_init) {
-
-		//	printf("[%s] ++++++++++ co_schedule, schedule1, tid:%d, cid:%d\n", date_ms().c_str(), gettid(), co->_id);
 
 			co->_init = true;
 
@@ -95,7 +94,6 @@ void CoSchedule::run()
 
 void CoSchedule::yield()
 {
-//	printf("[%s] mmmmmmmmmmmmmmm yield, id:%d\n", date_ms().c_str(), _running_id);
 	auto co = g_manager.get_co(_running_id);
 	co->_state = RUNNABLE;
 
@@ -112,7 +110,6 @@ void CoSchedule::switch_to_main(const function<void()>& do_after_switch_func)
 	assert(_running_id != -1);
 	_do_after_switch_func = do_after_switch_func;
 
-//	printf("[%s] mmmmmmmmmmmmmmm switch_to_main, id:%d\n", date_ms().c_str(), _running_id);
 	auto co = g_manager.get_co(_running_id);
 	swapcontext(&(co->_ctx), &_main_ctx);
 }
@@ -160,12 +157,10 @@ CoManager::CoManager()
 
 CoManager::~CoManager()
 {
-	printf("~CoManager, beg\n");
 	_is_stop = true;
 	for (auto& item : _threads) {
 		item.join();
 	}
-	printf("~CoManager, end\n");
 }
 
 bool CoManager::create(const function<void()>& func)
@@ -210,7 +205,7 @@ void CoManager::switch_to_main(const function<void()>& do_after_switch_func)
 	if (is_in_co_env()) {
 		g_schedule->switch_to_main(do_after_switch_func);
 	} else {
-		THROW_EXCEPTION("switch_to_main not in coroutine env, tid:%d", gettid());
+		THROW_EXCEPTION(CO_ERROR_NOT_IN_CO_ENV, "");
 	}
 }
 
@@ -250,9 +245,6 @@ void CoManager::sleep_ms(unsigned int msec)
 
 shared_ptr<Coroutine> CoManager::get_co(int id)
 {
-	if (id < 0) {
-		printf("[%s] mmmmmmmmmmmmmmm tid:%d, id:%d\n", date_ms().c_str(), gettid(), id);
-	}
 	assert(id >= 0);
 	assert(id < (int)_lst_co.size());
 	return _lst_co[id];
@@ -300,7 +292,6 @@ shared_ptr<Coroutine> CoManager::get_ready_co()
 	auto now = now_ms();
 	auto beg_iter = _lst_sleep.begin();
 	if (_lst_sleep.size() > 0 && beg_iter->first <= now) {
-		printf("[%s] ############### CoManager, sleep.element, sleep.size:%ld, first:%ld, now:%ld\n", date_ms().c_str(), _lst_sleep.size(), beg_iter->first, now);
 		auto end_iter = _lst_sleep.lower_bound(now);
 		for (auto iter = beg_iter; iter != end_iter; iter++) {
 			_lst_ready.push_front(_lst_co[iter->second]);
@@ -312,7 +303,6 @@ shared_ptr<Coroutine> CoManager::get_ready_co()
 	if (_lst_ready.size() > 0) {
 		co = _lst_ready.front();
 		_lst_ready.erase(_lst_ready.begin());
-	//	printf("[%s] +++++++++++++ co_manager, get_ready_co, cid:%d\n", date_ms().c_str(), co->_id);
 	}
 	return co;
 }
@@ -373,7 +363,6 @@ mutex* CoManager::get_locker()
 
 void CoManager::co_run(int id)
 {
-	printf("[%s] mmmmmmmmmmmmmmm co_run, id:%d\n", date_ms().c_str(), id);
 	auto co = g_manager.get_co(id);
 
 	co->_func();

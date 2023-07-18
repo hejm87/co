@@ -11,13 +11,6 @@
 
 using namespace std;
 
-#define THROW_EXCEPTION(fmt, ...) \
-{ \
-	char ex[1024]; \
-	snprintf(ex, sizeof(ex), "[FILE:%s,LINE:%d] exception:" fmt, __FILE__, __LINE__, ##__VA_ARGS__); \
-	throw string(ex); \
-}
-
 //#define now() time(NULL)
 
 #define now_ms() \
@@ -37,7 +30,26 @@ public:
 	}
 };
 
-inline std::string date_ms(long time_ms = 0) {
+template <class... Args>
+string format_string(const string& fmt, Args... args)
+{
+    const int MAX_FORMAT_BUF_SIZE = 1024;
+    string ret_msg;
+    auto size = snprintf(nullptr, 0, fmt.c_str(), args...) + 1;
+    if (size <= MAX_FORMAT_BUF_SIZE) {
+        char msg[MAX_FORMAT_BUF_SIZE];
+        snprintf(msg, sizeof(msg), fmt.c_str(), args...);
+        ret_msg = msg;
+    } else {
+        unique_ptr<char[]> buf(new char[size]);
+        snprintf(buf.get(), size, fmt.c_str(), args...);
+        ret_msg = buf.get();
+    }
+    return ret_msg;
+}
+
+inline string date_ms(long time_ms = 0)
+{
     char date[32];
     time_t sec;
     long msec;

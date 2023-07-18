@@ -5,6 +5,7 @@
 #include "co_mutex.h"
 #include "common/semaphore.h"
 #include "co_semaphore.h"
+#include "co_exception.h"
 #include "utils.h"
 
 template <class T>
@@ -78,7 +79,7 @@ public:
 		_co_mutex.lock();
 		if (_closed) {
 			_co_mutex.unlock();
-			THROW_EXCEPTION("channel close");
+			THROW_EXCEPTION(CO_ERROR_CHANNEL_CLOSE, "channel close");
 		}
 
 		auto send_ptr = shared_ptr<CoChannelSendItem<T>>(new CoChannelSendItem<T>(obj));
@@ -115,7 +116,7 @@ public:
 	//		getcid()
 	//	);
 		if (send_ptr->code) {
-			THROW_EXCEPTION("channel close");
+			THROW_EXCEPTION(CO_ERROR_CHANNEL_CLOSE, "channel close");
 		}
 	}
 
@@ -123,13 +124,13 @@ public:
 		_co_mutex.lock();
 		if (_closed) {
 			_co_mutex.unlock();
-			THROW_EXCEPTION("channel close");
+			THROW_EXCEPTION(CO_ERROR_CHANNEL_CLOSE, "channel close");
 		}
 
 		while (!_lst_send.size()) {
 			if (_closed) {
 				_co_mutex.unlock();
-				THROW_EXCEPTION("channel close");
+				THROW_EXCEPTION(CO_ERROR_CHANNEL_CLOSE, "channel close");
 			}
 			_recv_wait_count++;
 			_co_mutex.unlock();
@@ -192,7 +193,7 @@ public:
 			_co_mutex.lock();
 			if (_closed) {
 				_co_mutex.unlock();
-				THROW_EXCEPTION("channel close");
+				THROW_EXCEPTION(CO_ERROR_CHANNEL_CLOSE, "channel close");
 			}
 			// 放置队列操作
 			auto cur_size = _queue.size();
@@ -220,7 +221,7 @@ public:
 			auto cur_size = _queue.size();
 			if (_closed && !cur_size) {
 				_co_mutex.unlock();
-				THROW_EXCEPTION("channel close");
+				THROW_EXCEPTION(CO_ERROR_CHANNEL_CLOSE, "channel close");
 			}
 			if (cur_size > 0) {
 				auto obj = _queue.front();
