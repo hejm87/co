@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
 #include <sys/time.h>
 
 #include <string>
@@ -17,7 +18,7 @@ using namespace std;
 	throw string(ex); \
 }
 
-#define now() time(NULL)
+//#define now() time(NULL)
 
 #define now_ms() \
 ({ \

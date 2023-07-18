@@ -4,228 +4,289 @@
 #include "co.h"
 #include "co_mutex.h"
 #include "common/semaphore.h"
+#include "co_semaphore.h"
 #include "utils.h"
 
-#include <mutex>
-#include <condition_variable>
+template <class T>
+class CoChannelSendItem
+{
+public:
+	CoChannelSendItem(const T& obj) {
+		this->code = 0;
+		this->obj = obj;
+	}
+public:
+	int code;
+	T obj;
+	CoSemaphore sem;
+};
+
+template <class T>
+class CoChannelBase
+{
+public:
+	virtual ~CoChannelBase() {;}
+
+	virtual void set_obj(const T& obj) = 0;
+	virtual T get_obj() = 0;	
+
+	virtual void close() = 0;
+};
+
+template <class T>
+class CoChannelSync : public CoChannelBase<T>
+{
+public:
+	CoChannelSync() {
+		_closed = false;
+		_recv_wait_count = 0;
+	}
+
+	~CoChannelSync() {
+		if (_closed) {
+			_closed = false;
+			close();
+		}
+	}
+
+	void close() {
+		_co_mutex.lock();
+		if (_closed) {
+			_co_mutex.unlock();
+			return ;
+		}
+
+		_closed = true;
+
+		for (auto& item : _lst_send) {
+			item->code = -1;
+			item->sem.signal();
+		}
+		_lst_send.clear();
+
+		if (_co_sem_recv.get_value() < 0) {
+			int count = _co_sem_recv.get_value() * -1;
+			for (int i = 0; i < count; i++) {
+				_co_sem_recv.signal();
+			}
+		}
+
+		_co_mutex.unlock();
+	}
+
+	void set_obj(const T& obj) {
+		_co_mutex.lock();
+		if (_closed) {
+			_co_mutex.unlock();
+			THROW_EXCEPTION("channel close");
+		}
+
+		auto send_ptr = shared_ptr<CoChannelSendItem<T>>(new CoChannelSendItem<T>(obj));
+		_lst_send.push_back(send_ptr);
+	//	printf(
+	//		"[%s] ccccccccccccccc, set_obj, tid:%d, cid:%d, _lst_send.push_back\n", 
+	//		date_ms().c_str(),
+	//		gettid(),
+	//		getcid()
+	//	);
+		if (_recv_wait_count > 0) {
+		//	printf(
+		//		"[%s] ccccccccccccccc, set_obj, tid:%d, cid:%d, signal receiver\n", 
+		//		date_ms().c_str(),
+		//		gettid(),
+		//		getcid()
+		//	);
+			_recv_wait_count--;
+			_co_sem_recv.signal();
+		}
+		_co_mutex.unlock();
+
+	//	printf(
+	//		"[%s] ccccccccccccccc, set_obj, tid:%d, cid:%d, wait\n", 
+	//		date_ms().c_str(),
+	//		gettid(),
+	//		getcid()
+	//	);
+		send_ptr->sem.wait();
+	//	printf(
+	//		"[%s] ccccccccccccccc, set_obj, tid:%d, cid:%d, wait finish\n", 
+	//		date_ms().c_str(),
+	//		gettid(),
+	//		getcid()
+	//	);
+		if (send_ptr->code) {
+			THROW_EXCEPTION("channel close");
+		}
+	}
+
+	T get_obj() {
+		_co_mutex.lock();
+		if (_closed) {
+			_co_mutex.unlock();
+			THROW_EXCEPTION("channel close");
+		}
+
+		while (!_lst_send.size()) {
+			if (_closed) {
+				_co_mutex.unlock();
+				THROW_EXCEPTION("channel close");
+			}
+			_recv_wait_count++;
+			_co_mutex.unlock();
+			_co_sem_recv.wait();
+			_co_mutex.lock();
+		}
+
+		auto ptr = _lst_send.front();
+		_lst_send.pop_front();
+
+		_co_mutex.unlock();
+
+		ptr->sem.signal();
+		return ptr->obj;
+	}
+
+private:
+	bool _closed;
+	int  _recv_wait_count;
+
+	CoMutex _co_mutex;
+	CoSemaphore _co_sem_recv;
+
+	list<shared_ptr<CoChannelSendItem<T>>> _lst_send;
+};
+
+template <class T>
+class CoChannelAsync : public CoChannelBase<T>
+{
+public:
+	CoChannelAsync(size_t size) {
+		_send_wait = 0;
+		_recv_wait = 0;
+		_max_size = size;
+		_closed = false;
+	}
+
+	~CoChannelAsync() {
+		close();
+	}
+
+	void close() {
+		_co_mutex.lock();
+		if (_closed) {
+			_co_mutex.unlock();
+			return ;
+		}
+		_closed = true;
+		for (int i = 0; i < _send_wait; i++) {
+			_send_sem.signal();
+		}
+		for (int i = 0; i < _recv_wait; i++) {
+			_recv_sem.signal();
+		}
+		_co_mutex.unlock();
+	}
+
+	void set_obj(const T& obj) {
+		do {
+			_co_mutex.lock();
+			if (_closed) {
+				_co_mutex.unlock();
+				THROW_EXCEPTION("channel close");
+			}
+			// ∑≈÷√∂”¡–≤Ÿ◊˜
+			auto cur_size = _queue.size();
+			if (cur_size < _max_size) {
+				_queue.push_back(obj);
+				if (_recv_wait > 0) {
+					_recv_wait--;
+					_recv_sem.signal();
+				}
+				_co_mutex.unlock();
+			//	printf("[%s] ccccccccccccccc, tid:%d, cid:%d, set_obj by now\n", date_ms().c_str(), gettid(), getcid());
+				break ;
+			}
+			// ∑≈÷√µΩ∑¢ÀÕ∂”¡–£¨–›√ﬂ¥˝ªΩ–—
+			_send_wait++;
+			_co_mutex.unlock();
+		//	printf("[%s] ccccccccccccccc, tid:%d, cid:%d, set_obj by wait\n", date_ms().c_str(), gettid(), getcid());
+			_send_sem.wait();
+		} while (1);
+	}
+
+	T get_obj() {
+		do {
+			_co_mutex.lock();
+			auto cur_size = _queue.size();
+			if (_closed && !cur_size) {
+				_co_mutex.unlock();
+				THROW_EXCEPTION("channel close");
+			}
+			if (cur_size > 0) {
+				auto obj = _queue.front();
+				_queue.pop_front();
+				if (!_closed && _send_wait > 0) {
+					_send_wait--;
+					_send_sem.signal();
+				}
+				_co_mutex.unlock();
+				return obj;
+			} else {
+				// ∑≈÷√µΩΩ” ’∂”¡–£¨–›√ﬂ¥˝ªΩ–—
+				_recv_wait++;
+				_co_mutex.unlock();
+				_recv_sem.wait();
+			}
+		} while (1);
+	}
+
+private:
+	bool _closed;
+
+	int _max_size;
+	list<T> _queue;
+	
+	int _send_wait;
+	int _recv_wait;
+
+	CoSemaphore _send_sem;
+	CoSemaphore _recv_sem;
+
+	CoMutex _co_mutex;
+};
 
 template <class T>
 class CoChannel
 {
 public:
 	CoChannel(size_t size = 0) {
-		printf("!!!!!!!!!!!!!! CoChannel(), ptr:%p\n", this);
-		_closed = false;
-		_max_size = size;
-		_sem_send = new Semaphore();
-		_sem_recv = new Semaphore();
+		if (!size) {
+			_co_chan = new CoChannelSync<T>();
+		} else {
+			_co_chan = new CoChannelAsync<T>(size);
+		}
 	}
-
 	~CoChannel() {
-		printf("!!!!!!!!!!!!!! ~CoChannel(), ptr:%p\n", this);
-		close();
-		delete _sem_send;
-		delete _sem_recv;
+		if (_co_chan) {
+			close();
+			delete _co_chan;
+			_co_chan = NULL;
+		}
 	}
-
 	void close() {
-		_mutex.lock();
-		if (_closed) {
-			_mutex.unlock();
-			return ;
-		}
-		_closed = true;
-		_mutex.unlock();
-
-		for (auto& item : _lst_send_waits) {
-			g_manager.resume_co(item->_id);
-		}
-
-		for (auto& item : _lst_recv_waits) {
-			g_manager.resume_co(item->_id);
-		}
-		_queue.clear();
+		_co_chan->close();
 	}
 
 	void operator>>(T& obj) {
-		if (!_max_size) {
-			recv_without_cache(obj);
-		} else {
-			;
-		}
+		obj = _co_chan->get_obj();
 	}
 
 	void operator<<(const T& obj) {
-		if (!_max_size) {
-			send_without_cache(obj);
-		} else {
-			;
-		}
-	}
-
-	void send_without_cache(const T& obj) {
-
-		_mutex.lock();
-
-		if (_closed) {
-			_mutex.unlock();
-			THROW_EXCEPTION("channel close");
-		}
-
-		shared_ptr<Coroutine> cur_co;
-		if (is_in_co_env()) {
-			cur_co = g_manager.get_running_co();
-		} else {
-			cur_co = g_manager.get_free_co();
-			cur_co->_func = [this] {
-				_sem_send->signal();
-			};
-		}
-
-		// lockÊîæ‰∏ãÈù¢ÊúâË¢´lockÈáçÁΩÆco._stateÈó?È¢òÔºåÂêéÁª≠ÈúÄË¶Å‰ºòÂåñ‰ª£Á†?
-		// ËøôÁ?çÊòæÂºèË?æÁΩÆÂçèÁ®ãÁä∂ÊÄÅÁöÑÊ®°ÂºèÈúÄË¶ÅÂéªÈô?
-		assert(cur_co);
-		cur_co->_state = SUSPEND;
-		cur_co->_channel_param.type = CHANNEL_BLOCK_SEND;
-		cur_co->_channel_param.param = obj;
-
-		_lst_send_waits.push_back(cur_co);
-
-		printf(
-			"[%s] ccccccccccccccc, send_without_cache, suspend, tid:%d, cid:%d, _lst_send_waits.size:%ld\n", 
-			date_ms().c_str(),
-			gettid(),
-			getcid(),
-			_lst_send_waits.size()
-		);
-
-		if (_lst_recv_waits.size() > 0) {
-			auto resume_co = _lst_recv_waits.front();
-			_lst_recv_waits.pop_front();
-			// for test
-			assert(cur_co->_id != resume_co->_id);
-
-			g_manager.resume_co(resume_co->_id);
-		}
-
-		if (is_in_co_env()) {
-			g_schedule->switch_to_main([this] {
-				_mutex.unlock();
-			});
-		} else {
-			g_manager.add_suspend_co(cur_co);
-			_mutex.unlock();
-			_sem_send->wait();
-		}
-
-		if (_closed) {
-			THROW_EXCEPTION("channel close");
-		}
-		if (is_in_co_env()) {
-			if (cur_co->_channel_param.type != CHANNEL_BLOCK_NULL) {
-				printf(
-					"[%s] ccccccccccccccc, tid:%d, cid:%d, channel_param_type:%d\n", 
-					date_ms().c_str(),
-					gettid(),
-					getcid(),
-					cur_co->_channel_param.type
-				);
-			}
-			assert(cur_co->_channel_param.type == CHANNEL_BLOCK_NULL);
-		}
-	}
-
-	void recv_without_cache(T& obj) {
-
-		_mutex.lock();
-
-		if (_closed) {
-			_mutex.unlock();
-			THROW_EXCEPTION("channel close");
-		}
-
-		if (!_lst_send_waits.size()) {
-
-			do {
-				shared_ptr<Coroutine> cur_co;
-				if (is_in_co_env()) {
-					cur_co = g_manager.get_running_co();
-				} else {
-					cur_co = g_manager.get_free_co();
-					cur_co->_func = [this] {
-						_sem_recv->signal();
-					};
-				}
-
-				assert(cur_co);
-				cur_co->_state = SUSPEND;
-				cur_co->_channel_param.type = CHANNEL_BLOCK_RECV;
-				cur_co->_channel_param.param.Reset();
-
-				_lst_recv_waits.push_back(cur_co);
-
-				printf(
-					"[%s] ccccccccccccccc, recv_without_cache, suspend because no send waits, tid:%d, cid:%d\n",
-					date_ms().c_str(),
-					gettid(),
-					getcid()
-				);
-
-				if (is_in_co_env()) {
-					g_schedule->switch_to_main([this] {
-						_mutex.unlock();
-					});
-				} else {
-					g_manager.add_suspend_co(cur_co);
-					_mutex.unlock();
-					_sem_recv->wait();
-				}
-
-				if (_closed) {
-					THROW_EXCEPTION("channel close");
-				}
-				_mutex.lock();
-				// ËôΩÁÑ∂Ë¢?Âî§ÈÜí‰∫ÜÔºå‰ΩÜÊòØÂèàÂèØËÉΩË??ÂÖ∂‰ªñÂçèÁ®ãÊä¢Âç†‰∫?
-				if (_lst_send_waits.size() > 0) {
-					break ;
-				}
-			} while (1);
-		}
-
-		auto resume_co = _lst_send_waits.front();
-		_lst_send_waits.pop_front();
-
-		obj = resume_co->_channel_param.param.AnyCast<T>();
-		resume_co->_channel_param.type = CHANNEL_BLOCK_NULL;
-		resume_co->_channel_param.param.Reset();
-
-		printf(
-			"[%s] ccccccccccccccc, recv_without_cache, wake up and resume send waits, tid:%d, cid:%d, resume_cid:%d, channel_param_type:%d\n", 
-			date_ms().c_str(),
-			gettid(),
-			getcid(),
-			resume_co->_id,
-			resume_co->_channel_param.type
-		);
-
-		g_manager.resume_co(resume_co->_id);
-		_mutex.unlock();
+		_co_chan->set_obj(obj);
 	}
 
 private:
-	bool _closed;
-
-	size_t _max_size;
-
-	list<shared_ptr<Coroutine>> _lst_send_waits;	
-	list<shared_ptr<Coroutine>> _lst_recv_waits;	
-
-	list<T> _queue;
-
-	CoMutex _mutex;
-
-	Semaphore*	_sem_send;
-	Semaphore*	_sem_recv;
+	CoChannelBase<T>*	_co_chan;
 };
 
 #endif

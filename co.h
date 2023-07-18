@@ -117,6 +117,8 @@ public:
 
 	shared_ptr<Coroutine> create_with_co(const function<void()>& func);
 
+	void switch_to_main(const function<void()>& do_after_switch_func = nullptr);
+
 	void yield();
 
 	void sleep(unsigned int sec);

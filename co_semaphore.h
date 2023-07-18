@@ -3,11 +3,15 @@
 
 #include <memory>
 #include <list>
-#include "common/semaphore.h"
+#include "utils.h"
+//#include "common/semaphore.h"
 
 using namespace std;
 
 #define __SEM_DEBUG
+
+const int _MAX_SEM_POSITIVE = 1073741823;
+const int _MAX_SEM_NEGATIVE = -1073741824;
 
 class Coroutine;
 
@@ -15,8 +19,11 @@ class CoSemaphore
 {
 public:
     CoSemaphore(int value = 0) {
-        _sem = new Semaphore();
-        _value.store(value);
+        if (value > _MAX_SEM_POSITIVE || value < _MAX_SEM_NEGATIVE) {
+            THROW_EXCEPTION("CoSemaphore init value:%d out of range", value);
+        }
+       // _sem = new Semaphore();
+        _value.store(value << 1);
 
 #ifdef __SEM_DEBUG
         _send_count.store(0);
@@ -29,8 +36,10 @@ public:
 #endif
     }
 
+	CoSemaphore(const CoSemaphore&) = delete;
+
     ~CoSemaphore() {
-        delete _sem;
+       // delete _sem;
 #ifdef __SEM_DEBUG
         printf("count:%d\n", _send_count.load());
         printf("send|busy:%d, yield:%d\n", _send_busy_try.load(), _send_yield_try.load());
@@ -38,9 +47,11 @@ public:
 #endif
     }
 
+	CoSemaphore& operator=(const CoSemaphore&) = delete;
+
     int get_value();
 
-    void signal();
+    bool signal();
 
     void wait();
 
@@ -50,7 +61,7 @@ private:
 
     list<shared_ptr<Coroutine>> _lst_wait;
 
-    Semaphore* _sem;
+   // Semaphore* _sem;
 
 #ifdef __SEM_DEBUG
     atomic<int> _send_count;

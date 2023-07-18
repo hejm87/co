@@ -3,6 +3,7 @@
 #include "co.h"
 #include "co_semaphore.h"
 #include "utils.h"
+#include "common/semaphore.h"
 
 #define IS_LOCK(x)    ((x) & 0x1 ? true : false)
 
@@ -20,11 +21,14 @@ int CoSemaphore::get_value()
     return GET_VALUE(_value.load());
 }
 
-void CoSemaphore::signal()
+bool CoSemaphore::signal()
 {
     int try_count = 0;
     do {
         auto value = _value.load();
+        if (GET_VALUE(value) > _MAX_SEM_POSITIVE) {
+            return false;
+        }
         auto is_lock = IS_LOCK(value);
         try_count++;
         if (is_lock) {
@@ -88,6 +92,7 @@ void CoSemaphore::signal()
             try_count = 0;
         }
     } while (1);
+    return true;
 }
 
 void CoSemaphore::wait()
@@ -98,7 +103,7 @@ void CoSemaphore::wait()
         auto is_lock = IS_LOCK(value);
         try_count++;
         if (is_lock) {
-            if (try_count <= TRY_LOCK_COUNT) {
+            if (try_count <= TRY_LOCK_COUNT || GET_VALUE(value) < _MAX_SEM_NEGATIVE) {
 #ifdef __SEM_DEBUG
                 _recv_busy_try++;
 #endif
@@ -126,13 +131,14 @@ void CoSemaphore::wait()
                     _value.store(unlock_value);
                     return ;
                 }
+                Semaphore sem;
                 shared_ptr<Coroutine> co;
                 if (is_in_co_env()) {
                     co = g_manager.get_running_co();
                 } else {
                     co = g_manager.get_free_co();
-                    co->_func = [this] {
-                        _sem->signal();
+                    co->_func = [this, &sem] {
+                        sem.signal();
                     };
                 }
                 _lst_wait.push_back(co);
@@ -159,7 +165,7 @@ void CoSemaphore::wait()
                    // );
                     g_manager.add_suspend_co(co);
                     _value.store(unlock_value);
-                    _sem->wait();
+                    sem.wait();
                 }
                 break ;
             }

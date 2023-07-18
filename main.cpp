@@ -28,6 +28,8 @@ void lock_test1();
 void channel_test();
 void channel_test1();
 void channel_test2();
+void channel_cache_test();
+void channel_cache_test1();
 void semaphore_test();
 void semaphore_test1();
 void sleep_test();
@@ -43,8 +45,10 @@ int main()
 //	channel_test();
 //	channel_test1();
 //	channel_test2();
+//	channel_cache_test();
+	channel_cache_test1();
 //	semaphore_test();
-	semaphore_test1();
+//	semaphore_test1();
 //	sleep_test();
 //	timer_test();
 	return 0;
@@ -225,12 +229,14 @@ void channel_test()
 	});
 
 	g_manager.create([&chan, &is_end] {
+		int expect = 0;
 		try {
 			do {
 				int v;
 				printf("[%s] ############ tid:%d, cid:%d, ready to read\n", date_ms().c_str(), gettid(), getcid());
 				chan >> v;
 				printf("[%s] ############ tid:%d, cid:%d, read value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
+				assert(expect++ == v);
 			} while (1);
 		} catch (string& ex) {
 			printf("ex:%s\n", ex.c_str());
@@ -331,6 +337,147 @@ void channel_test2()
 
 	printf("recv_count:%d\n", recv_count);
 	assert(recv_count == LOOP);
+}
+
+void channel_cache_test()
+{
+	const int LOOP = 5;
+	const int CACHE_SIZE = 5;
+	const int SLEEP_MS = 100;
+
+	atomic<bool> start_read(false);
+	atomic<int>  end_count(0);
+
+	CoChannel<int> chan(CACHE_SIZE);
+
+	g_manager.create([&chan, &start_read, &end_count] {
+		for (int i = 0; i < LOOP; i++) {
+			printf("[%s] ############### tid:%d, cid:%d, before, write\n", date_ms().c_str(), gettid(), getcid());
+			chan << i;
+			printf("[%s] ############### tid:%d, cid:%d, after, write\n", date_ms().c_str(), gettid(), getcid());
+		}
+		auto beg_ms = now_ms();
+		start_read = true;
+		chan << 99;
+		auto end_ms = now_ms();
+		printf("[%s] ############### wait_ms:%ld, beg_ms:%ld, end_ms:%ld\n", date_ms().c_str(), end_ms - beg_ms, beg_ms, end_ms);
+		assert(end_ms - beg_ms >= SLEEP_MS);
+		chan.close();
+		end_count++;
+	});
+
+	while (!start_read) {
+		usleep(1);
+	}
+
+	g_manager.create([&chan, &end_count] {
+		g_manager.sleep_ms(SLEEP_MS);
+		do {
+			try {
+				int v;
+				for (int i = 0; i < LOOP; i++) {
+			//	for (int i = 0; i < 1; i++) {
+					chan >> v;
+					assert(v == i);
+					printf("[%s] ############### tid:%d, cid:%d, read value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
+				}
+			//	printf("[%s] ############### tid:%d, cid:%d, sleep before read\n", date_ms().c_str(), gettid(), getcid());
+			//	g_manager.sleep_ms(SLEEP_MS);
+				printf("[%s] ############### tid:%d, cid:%d, final read value\n", date_ms().c_str(), gettid(), getcid());
+				chan >> v;
+				printf("[%s] ############### tid:%d, cid:%d, read value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
+			} catch (string& ex) {
+				printf("ex:%s\n", ex.c_str());
+				break ;
+			}
+		} while (1);
+		end_count++;
+	});
+
+	while (end_count != 2) {
+		usleep(10 * 1000);
+	}
+	printf("all finish\n");
+}
+
+void channel_cache_test1()
+{
+	const int LOOP = 100;
+	const int CACHE_SIZE = 5;
+	const int SLEEP_MS = 100;
+
+	const int SEND_COUNT = 2;
+	const int RECV_COUNT = 3;
+
+	atomic<int> send_total(0);
+	atomic<int> recv_total(0);
+
+	atomic<int> send_end_count(0);
+	atomic<int> recv_end_count(0);
+
+	CoChannel<int> chan(CACHE_SIZE);
+
+	int beg_value[2] = {0, 1000};
+	for (int i = 0; i < SEND_COUNT; i++) {
+		auto index = i;
+		g_manager.create([&chan, &send_total, &send_end_count, beg_value, index] {
+			printf("[%s] ############### cid:%d, send beg\n", date_ms().c_str(), getcid());
+			try {
+				for (int i = 0; i < LOOP; i++) {
+					auto score = beg_value[index] + i;
+					printf("[%s] ############### cid:%d, send, before value:%d\n", date_ms().c_str(), getcid(), score);
+					chan << score;
+					printf("[%s] ############### cid:%d, send, after value:%d\n", date_ms().c_str(), getcid(), score);
+					send_total += score;
+				}
+			} catch (string& ex) {
+				printf("[%s] ############### cid:%d, send, ex:%s\n", date_ms().c_str(), getcid(), ex.c_str());
+			}
+			send_end_count++;
+			printf("[%s] ############### cid:%d, send end\n", date_ms().c_str(), getcid());
+		});
+	}
+
+	for (int i = 0; i < RECV_COUNT; i++) {
+		g_manager.create([&chan, &recv_total, &recv_end_count] {
+			printf("[%s] ############### cid:%d, recv beg\n", date_ms().c_str(), getcid());
+			int v;
+			do {
+				try {
+					chan >> v;
+					printf("[%s] ############### cid:%d, recv, after value:%d\n", date_ms().c_str(), getcid(), v);
+					recv_total += v;
+				} catch(string& ex) {
+					printf("[%s] ############### cid:%d, recv, ex:%s\n", date_ms().c_str(), getcid(), ex.c_str());
+					break ;
+				}
+			} while (1);
+			recv_end_count++;
+			printf("[%s] ############### cid:%d, recv end\n", date_ms().c_str(), getcid());
+		});
+	}
+
+	while (send_end_count != SEND_COUNT) {
+		printf(
+			"[%s] ############### send_end_count:%d, send_total:%d, recv_total:%d\n", 
+			date_ms().c_str(), 
+			send_end_count.load(),
+			send_total.load(), 
+			recv_total.load()
+		);
+		usleep(100 * 1000);
+	}
+	printf("[%s] ############### send coroutines end\n", date_ms().c_str());
+	chan.close();
+
+	while (recv_end_count != RECV_COUNT) {
+		printf("[%s] ############### recv_end_count:%d\n", date_ms().c_str(), recv_end_count.load());
+		usleep(100 * 1000);
+	}
+	printf("[%s] ############### recv coroutines end\n", date_ms().c_str());
+
+	printf("[%s] ############### send_total:%d, recv_total:%d\n", date_ms().c_str(), send_total.load(), recv_total.load());
+	assert(send_total == recv_total);
 }
 
 void semaphore_test()
