@@ -9,7 +9,7 @@ simple coroutine framework
 [后续开发]
 1. channel非协程环境下使用  --> 完成
 2. channel带cache模式下功能逻辑 --> 完成
-3. create co 带返回值
+3. create co 带返回值	--> 完成
 4. co api封装
 5. 非协程环境getcid()返回-1 --> 完成
 6. create_co可以强制多生成协程

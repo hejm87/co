@@ -9,6 +9,7 @@
 #include <memory>
 #include <atomic>
 #include <functional>
+#include <utility>
 
 #include <mutex>
 #include <thread>
@@ -17,11 +18,13 @@
 #include <list>
 #include <vector>
 
-#include <sys/syscall.h>
-
 #include "common/any.h"
+#include "co_channel.h"
+#include "co_timer.h"
 
 using namespace std;
+
+class CoApi;
 
 const int DEFAULT_STACK_SZIE = 100 * 1024;
 const int MAX_COROUTINE_SIZE = 1000;
@@ -88,8 +91,6 @@ public:
 
 	void yield();
 
-//	void resume(shared_ptr<Coroutine> co);
-
 	void switch_to_main(const function<void()>& do_after_switch_func = nullptr);
 
 private:
@@ -98,7 +99,7 @@ private:
 public:
 	vector<shared_ptr<Coroutine>> _lst_free;
 	vector<shared_ptr<Coroutine>> _lst_ready;
-	vector<shared_ptr<Coroutine>> _lst_resume;	// 将协程放回g_manager，避免调度线程竞�?
+	vector<shared_ptr<Coroutine>> _lst_resume;	// 将协程放回g_manager，避免调度线程竞�??
 
 	ucontext_t _main_ctx;
 
@@ -163,9 +164,195 @@ private:
 
 	multimap<long, int> _lst_sleep;
 
+	CoTimer _timer;
+
 	vector<thread> _threads;
 
 	mutex _mutex;
+};
+
+//template <class T>
+//class CoAwait
+//{
+//friend class CoApi;
+//public:
+//	T wait() {
+//		T result;
+//		if (_chan.is_close()) {
+//			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "awaiter error");
+//		}
+//		try {
+//			_chan >> result;
+//		} catch (CoException& ex) {
+//			if (ex.code() != CO_ERROR_CHANNEL_CLOSE) {
+//				result = *_result;
+//			}
+//		}
+//		return result;
+//	}
+//
+//private:
+//	CoAwait(const CoAwait& obj) = delete;
+//	CoAwait& operator=(const CoAwait& obj) = delete;
+//
+//	CoAwait(CoAwait&& obj) {
+//	//	swap(_chan, obj._chan);
+//	//	swap(_result, obj._result);
+//	}
+//
+//	void signal(const T& obj) {
+//		if (_result) {
+//			_result = shared_ptr<T>(new T(obj));
+//			_chan.close();
+//		}
+//	}
+//
+//	CoChannel<int> _chan;
+//	shared_ptr<T>  _result;
+//};
+
+//template <>
+//class CoAwait<void>
+//{
+//friend class CoApi;
+//public:
+//	CoAwait(const CoAwait& obj) {
+//		_chan = obj._chan;
+//		printf("[%s] caaaaaaaaaaaaaa, CoAwait(const CoAwait& obj), ptr:%p, _chan:%p\n", date_ms().c_str(), this, _chan.get());
+//	}
+//
+//	~CoAwait() {
+//		printf("[%s] caaaaaaaaaaaaaa, ~CoAwait, ptr:%p, _chan:%p\n", date_ms().c_str(), this, _chan.get());
+//	}
+//
+//	void wait() {
+//		if (_chan->is_close()) {
+//			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "awaiter error");
+//		}
+//		try {
+//			int v;
+//			*_chan >> v;
+//		} catch (CoException& ex) {
+//			if (ex.code() != CO_ERROR_CHANNEL_CLOSE) {
+//				throw ex;
+//			}
+//		}
+//	}
+//
+//private:
+//	CoAwait() {
+//		_chan = shared_ptr<CoChannel<int>>(new CoChannel<int>());
+//		printf("[%s] caaaaaaaaaaaaaa, CoAwait(), ptr:%p, _chan:%p\n", date_ms().c_str(), this, _chan.get());
+//	}
+//	CoAwait& operator=(const CoAwait& obj) = delete;
+//
+//	void signal() {
+//		_chan->close();
+//	}
+//
+//	shared_ptr<CoChannel<int>> _chan;
+//};
+
+//template <class T>
+//class CoAwait
+//{
+//friend class CoApi;
+//public:
+//	CoAwait(shared_ptr<CoChannel<T>> chan) {
+//		_chan = chan;
+//	}
+//
+//	T wait() {
+//		T result;
+//		if (_chan->is_close()) {
+//			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "awaiter error");
+//		}
+//		try {
+//			*_chan >> result;
+//		} catch (CoException& ex) {
+//			if (ex.code() != CO_ERROR_CHANNEL_CLOSE) {
+//				result = *_result;
+//			}
+//		}
+//		return result;
+//	}
+//
+//private:
+//	CoAwait() = delete;
+//	CoAwait& operator=(const CoAwait& obj) = delete;
+//
+//	shared_ptr<CoChannel<T>> _chan;
+//	shared_ptr<T>  _result;
+//};
+
+template <class T>
+class CoAwait
+{
+friend class CoApi;
+public:
+	CoAwait(const CoAwait& obj) {
+		_chan = obj._chan;
+		_result = obj._result;
+	}
+
+	T wait() {
+		if (_chan->is_close()) {
+			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "awaiter error");
+		}
+		try {
+			T obj;
+			*_chan >> obj;
+		} catch (CoException& ex) {
+			if (ex.code() != CO_ERROR_CHANNEL_CLOSE) {
+				throw ex;
+			}
+		}
+		return *_result;
+	}
+
+private:
+	CoAwait& operator=(const CoAwait& obj) = delete;
+
+	CoAwait() {
+		_chan = shared_ptr<CoChannel<T>>(new CoChannel<T>());
+		_result = shared_ptr<T>(new T);
+	}
+
+	shared_ptr<CoChannel<T>> _chan;
+	shared_ptr<T>  _result;
+};
+
+template <>
+class CoAwait<void>
+{
+friend class CoApi;
+public:
+	CoAwait(const CoAwait& obj) {
+		_chan = obj._chan;
+	}
+
+	void wait() {
+		if (_chan->is_close()) {
+			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "awaiter error");
+		}
+		try {
+			int v;
+			*_chan >> v;
+		} catch (CoException& ex) {
+			if (ex.code() != CO_ERROR_CHANNEL_CLOSE) {
+				throw ex;
+			}
+		}
+	}
+
+private:
+	CoAwait& operator=(const CoAwait& obj) = delete;
+
+	CoAwait() {
+		_chan = shared_ptr<CoChannel<int>>(new CoChannel<int>);
+	}
+
+	shared_ptr<CoChannel<int>> _chan;
 };
 
 extern CoManager g_manager;
@@ -181,12 +368,7 @@ inline int getcid()
 	return cid;
 }
 
-inline int gettid()
-{
-	return syscall(SYS_gettid);
-}
-
-// �?否在协程线程�?�?
+// �??否在协程线程�??�??
 inline bool is_in_co_env()
 {
 	return g_schedule ? true : false;

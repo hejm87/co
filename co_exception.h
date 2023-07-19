@@ -18,10 +18,11 @@ class CoException;
 }
 
 const int CO_ERROR_UNKNOW = -1;
-const int CO_ERROR_PARAM_INVALID = 1;         // 非法参数
-const int CO_ERROR_CHANNEL_CLOSE = 2;         // channel已关�?
-const int CO_ERROR_UNLOCK_ILLEGAL = 3;        // 非锁状态下unlock
-const int CO_ERROR_NOT_IN_CO_ENV  = 4;        // 非协程环境下进�?�操�?
+const int CO_ERROR_INNER_EXCEPTION = 1;       // 内部异常
+const int CO_ERROR_PARAM_INVALID = 2;         // 非法参数
+const int CO_ERROR_CHANNEL_CLOSE = 3;         // channel已关闭
+const int CO_ERROR_UNLOCK_ILLEGAL = 4;        // 非锁状态下unlock
+const int CO_ERROR_NOT_IN_CO_ENV  = 5;        // 非协程环境下进行操作
 
 class CoException : public exception
 {
@@ -41,10 +42,10 @@ public:
         _msg  = format_string(fmt, forward<Args>(args)...);
     }
 
-    int     get_code() {return _code;}
-    string  get_file() {return _file;}
-    int     get_line() {return _line;}
-    string  get_msg()  {return _msg;}
+    int     code() {return _code;}
+    string  file() {return _file;}
+    int     line() {return _line;}
+    string  msg()  {return _msg;}
 
     string get_desc() {
         return format_string(

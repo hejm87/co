@@ -153,7 +153,10 @@ void CoSemaphore::wait()
                    //     gettid(),
                    //     getcid()
                    // );
-                    g_schedule->switch_to_main([this, unlock_value] {
+                   // g_schedule->switch_to_main([this, unlock_value] {
+                   //     _value.store(unlock_value);
+                   // });
+                    g_manager.switch_to_main([this, unlock_value] {
                         _value.store(unlock_value);
                     });
                 } else {

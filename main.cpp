@@ -6,12 +6,14 @@
 
 #include <map>
 
+#include "co_api.h"
 #include "co.h"
 #include "co_mutex.h"
 #include "co_channel.h"
 #include "co_semaphore.h"
 #include "co_timer.h"
 #include "utils.h"
+#include "common/common.h"
 
 using namespace std;
 
@@ -34,6 +36,8 @@ void semaphore_test();
 void semaphore_test1();
 void sleep_test();
 void timer_test();
+void await_test();
+void await_test1();
 
 int main()
 {
@@ -46,11 +50,13 @@ int main()
 //	channel_test1();
 //	channel_test2();
 //	channel_cache_test();
-	channel_cache_test1();
+//	channel_cache_test1();
 //	semaphore_test();
 //	semaphore_test1();
 //	sleep_test();
 //	timer_test();
+	await_test();
+//	await_test1();
 	return 0;
 }
 
@@ -99,7 +105,7 @@ void yield_test()
 		g_manager.create([i] {
 			for (int j = 0; j < 3; j++) {
 				printf("############# tid:%d, cid:%d, value:%d\n", gettid(), getcid(), j);
-				g_schedule->yield();
+				g_manager.yield();
 			}
 			printf("############# tid:%d, cid:%d, exit\n", gettid(), getcid());
 			g_count++;
@@ -662,4 +668,70 @@ void timer_test()
 
 	assert(end - beg >= 500);
 	assert(end - beg < 550);
+}
+
+void await_test()
+{
+	const int CO_COUNT = 3;
+
+	atomic<int> co_end_count(0);
+
+	auto beg = now_ms();
+	auto a = CoApi::create([] {
+		CoApi::sleep_ms(100);
+		return ;
+	});
+
+	for (int i = 0; i < CO_COUNT; i++) {
+		CoApi::create([&a, &co_end_count, beg] {
+			a.wait();
+			auto end = now_ms();
+			assert(end - beg >= 100);
+			co_end_count++;
+		});
+	}
+
+	a.wait();
+	while (co_end_count != CO_COUNT) {
+		usleep(10 * 1000);
+	}
+
+	auto end = now_ms();
+	assert(end - beg >= 100);
+	printf("all finish\n");
+}
+
+void await_test1()
+{
+	const int CO_COUNT = 3;
+
+	atomic<int> co_end_count(0);
+
+	auto beg = now_ms();
+	auto a = CoApi::create([]() -> int {
+		CoApi::sleep_ms(10);
+		return 99;
+	});
+
+	for (int i = 0; i < CO_COUNT; i++) {
+		CoApi::create([&a, &co_end_count, beg] {
+			auto v = a.wait();
+			printf("coroutine, wait, v:%d\n", v);
+			auto end = now_ms();
+			assert(v == 99);
+			assert(end - beg >= 10);
+			co_end_count++;
+		});
+	}
+
+	auto v = a.wait();
+	printf("main_thread, wait, v:%d\n", v);
+	assert(v == 99);
+	while (co_end_count != CO_COUNT) {
+		usleep(1 * 1000);
+	}
+
+	auto end = now_ms();
+	assert(end - beg >= 10);
+	printf("all finish\n");
 }

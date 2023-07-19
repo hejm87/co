@@ -5,6 +5,7 @@
 #include "co_timer.h"
 #include "co_exception.h"
 #include "utils.h"
+#include "common/common.h"
 
 CoManager g_manager;
 

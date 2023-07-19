@@ -3,6 +3,7 @@
 
 #include "co.h"
 #include "co_mutex.h"
+#include "common/common.h"
 #include "common/semaphore.h"
 #include "co_semaphore.h"
 #include "co_exception.h"
@@ -32,6 +33,20 @@ public:
 	virtual T get_obj() = 0;	
 
 	virtual void close() = 0;
+
+	virtual bool is_close() = 0;
+
+//	bool is_close() {
+//		bool closed;
+//		_co_mutex.lock();
+//		closed = _closed;
+//		_co_mutex.unlock();
+//		return closed;
+//	}
+
+//protected:
+//	bool _closed;
+//	CoMutex _co_mutex;
 };
 
 template <class T>
@@ -44,10 +59,15 @@ public:
 	}
 
 	~CoChannelSync() {
-		if (_closed) {
-			_closed = false;
-			close();
-		}
+		close();
+	}
+
+	bool is_close() {
+		bool closed;
+		_co_mutex.lock();
+		closed = _closed;
+		_co_mutex.unlock();
+		return closed;
 	}
 
 	void close() {
@@ -172,6 +192,14 @@ public:
 		close();
 	}
 
+	bool is_close() {
+		bool closed;
+		_co_mutex.lock();
+		closed = _closed;
+		_co_mutex.unlock();
+		return closed;
+	}
+
 	void close() {
 		_co_mutex.lock();
 		if (_closed) {
@@ -260,6 +288,9 @@ template <class T>
 class CoChannel
 {
 public:
+	CoChannel(const CoChannel&) = delete;
+	CoChannel& operator=(const CoChannel&) = delete;
+
 	CoChannel(size_t size = 0) {
 		if (!size) {
 			_co_chan = new CoChannelSync<T>();
@@ -267,13 +298,17 @@ public:
 			_co_chan = new CoChannelAsync<T>(size);
 		}
 	}
+
 	~CoChannel() {
-		if (_co_chan) {
-			close();
-			delete _co_chan;
-			_co_chan = NULL;
-		}
+		close();
+		delete _co_chan;
+		_co_chan = NULL;
 	}
+
+	bool is_close() {
+		_co_chan->is_close();
+	}
+
 	void close() {
 		_co_chan->close();
 	}
@@ -287,7 +322,7 @@ public:
 	}
 
 private:
-	CoChannelBase<T>*	_co_chan;
+	CoChannelBase<T>* _co_chan;
 };
 
 #endif
