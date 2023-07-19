@@ -126,6 +126,12 @@ public:
 
 	void sleep_ms(unsigned int msec);
 
+	CoTimerId set_timer(size_t delay_ms, const std::function<void()>& func);
+
+	bool cancel_timer(CoTimerId& id);
+
+	CoTimerState get_timer_state(const CoTimerId& id);
+
 	shared_ptr<Coroutine> get_co(int id);
 
 	shared_ptr<Coroutine> get_free_co();
@@ -170,120 +176,6 @@ private:
 
 	mutex _mutex;
 };
-
-//template <class T>
-//class CoAwait
-//{
-//friend class CoApi;
-//public:
-//	T wait() {
-//		T result;
-//		if (_chan.is_close()) {
-//			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "awaiter error");
-//		}
-//		try {
-//			_chan >> result;
-//		} catch (CoException& ex) {
-//			if (ex.code() != CO_ERROR_CHANNEL_CLOSE) {
-//				result = *_result;
-//			}
-//		}
-//		return result;
-//	}
-//
-//private:
-//	CoAwait(const CoAwait& obj) = delete;
-//	CoAwait& operator=(const CoAwait& obj) = delete;
-//
-//	CoAwait(CoAwait&& obj) {
-//	//	swap(_chan, obj._chan);
-//	//	swap(_result, obj._result);
-//	}
-//
-//	void signal(const T& obj) {
-//		if (_result) {
-//			_result = shared_ptr<T>(new T(obj));
-//			_chan.close();
-//		}
-//	}
-//
-//	CoChannel<int> _chan;
-//	shared_ptr<T>  _result;
-//};
-
-//template <>
-//class CoAwait<void>
-//{
-//friend class CoApi;
-//public:
-//	CoAwait(const CoAwait& obj) {
-//		_chan = obj._chan;
-//		printf("[%s] caaaaaaaaaaaaaa, CoAwait(const CoAwait& obj), ptr:%p, _chan:%p\n", date_ms().c_str(), this, _chan.get());
-//	}
-//
-//	~CoAwait() {
-//		printf("[%s] caaaaaaaaaaaaaa, ~CoAwait, ptr:%p, _chan:%p\n", date_ms().c_str(), this, _chan.get());
-//	}
-//
-//	void wait() {
-//		if (_chan->is_close()) {
-//			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "awaiter error");
-//		}
-//		try {
-//			int v;
-//			*_chan >> v;
-//		} catch (CoException& ex) {
-//			if (ex.code() != CO_ERROR_CHANNEL_CLOSE) {
-//				throw ex;
-//			}
-//		}
-//	}
-//
-//private:
-//	CoAwait() {
-//		_chan = shared_ptr<CoChannel<int>>(new CoChannel<int>());
-//		printf("[%s] caaaaaaaaaaaaaa, CoAwait(), ptr:%p, _chan:%p\n", date_ms().c_str(), this, _chan.get());
-//	}
-//	CoAwait& operator=(const CoAwait& obj) = delete;
-//
-//	void signal() {
-//		_chan->close();
-//	}
-//
-//	shared_ptr<CoChannel<int>> _chan;
-//};
-
-//template <class T>
-//class CoAwait
-//{
-//friend class CoApi;
-//public:
-//	CoAwait(shared_ptr<CoChannel<T>> chan) {
-//		_chan = chan;
-//	}
-//
-//	T wait() {
-//		T result;
-//		if (_chan->is_close()) {
-//			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "awaiter error");
-//		}
-//		try {
-//			*_chan >> result;
-//		} catch (CoException& ex) {
-//			if (ex.code() != CO_ERROR_CHANNEL_CLOSE) {
-//				result = *_result;
-//			}
-//		}
-//		return result;
-//	}
-//
-//private:
-//	CoAwait() = delete;
-//	CoAwait& operator=(const CoAwait& obj) = delete;
-//
-//	shared_ptr<CoChannel<T>> _chan;
-//	shared_ptr<T>  _result;
-//};
 
 template <class T>
 class CoAwait

@@ -5,21 +5,7 @@
 #include "common/common.h"
 
 using namespace std;
-/*
-    template <class F, class... Args>
-    static auto create_with_promise(F&& f, Args&&... args)
-        -> CoAwaiter<typename std::enable_if<std::is_void<typename std::result_of<F(Args...)>::type>::value>::type>
-    {
-        CoAwaiter<void> awaiter;
-        auto co_func = std::bind(forward<F>(f), forward<Args>(args)...);
-        auto func = [co_func, &awaiter]() {
-            co_func();
-            awaiter.set_value();
-        };
-        Singleton<CoSchedule>::get_instance()->create(false, func);
-        return awaiter;
-    }
-*/
+
 class CoApi
 {
 public:
@@ -27,14 +13,12 @@ public:
     static auto create(F&& f, Args&&... args)
         -> CoAwait<typename std::enable_if<!std::is_void<typename std::result_of<F(Args...)>::type>::value, typename std::result_of<F(Args...)>::type>::type>
     {
-        printf("[%s] apiaaaaaaaaaaaa, create co with type\n", date_ms().c_str());
         using utype = typename std::result_of<F(Args...)>::type;
         auto co_wait = CoAwait<utype>();
         auto co_func = bind(forward<F>(f), forward<Args>(args)...); 
         g_manager.create([co_func, co_wait] {
             *co_wait._result = co_func();
             co_wait._chan->close();
-            printf("[%s] apiaaaaaaaaaaaa, after signal\n", date_ms().c_str());
         });
         return co_wait;
     }
@@ -43,13 +27,11 @@ public:
     static auto create(F&& f, Args&&... args)
         -> CoAwait<typename std::enable_if<std::is_void<typename std::result_of<F(Args...)>::type>::value>::type>
     {
-        printf("[%s] apiaaaaaaaaaaaa, create co no type\n", date_ms().c_str());
         auto co_wait = CoAwait<void>();
         auto co_func = bind(forward<F>(f), forward<Args>(args)...); 
         g_manager.create([co_func, co_wait] {
             co_func();
             co_wait._chan->close();
-            printf("[%s] apiaaaaaaaaaaaa, after signal\n", date_ms().c_str());
         });
         return co_wait;
     }
@@ -64,6 +46,18 @@ public:
 
     static void sleep_ms(int msec) {
         g_manager.sleep_ms(msec);
+    }
+
+    static CoTimerId set_timer(size_t delay_ms, const std::function<void()>& func) {
+        return g_manager.set_timer(delay_ms, func);
+    }
+
+	static bool cancel_timer(CoTimerId& id) {
+        return g_manager.cancel_timer(id);
+    }
+
+	static CoTimerState get_timer_state(const CoTimerId& id) {
+        return g_manager.get_timer_state(id);
     }
 
     static int getcid() {

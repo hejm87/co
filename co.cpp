@@ -244,6 +244,21 @@ void CoManager::sleep_ms(unsigned int msec)
 	g_schedule->switch_to_main();
 }
 
+CoTimerId CoManager::set_timer(size_t delay_ms, const std::function<void()>& func)
+{
+	return _timer.set(delay_ms, func);
+}
+
+bool CoManager::cancel_timer(CoTimerId& id)
+{
+	return _timer.cancel(id);
+}
+
+CoTimerState CoManager::get_timer_state(const CoTimerId& id)
+{
+	return _timer.get_state(id);
+}
+
 shared_ptr<Coroutine> CoManager::get_co(int id)
 {
 	assert(id >= 0);
@@ -272,11 +287,19 @@ shared_ptr<Coroutine> CoManager::get_running_co()
 
 shared_ptr<Coroutine> CoManager::get_ready_co()
 {
-	// 获取定时器任�??
-	auto expires = Singleton<CoTimer>::get_instance()->get_expires();
-	for (auto& func : expires) {
-		if (!create(func)) {
-			Singleton<CoTimer>::get_instance()->set(0, func);
+	// 获取定时器任务
+	while (1) {
+		auto expire = _timer.get_expire();
+		if (!expire) {
+			break ;
+		}
+		auto co = create([expire] {
+			expire->state = CO_TIMER_PROCESS;
+			expire->func();
+			expire->state = CO_TIMER_FINISH;
+		});
+		if (!co) {
+			_timer.set(0, expire);
 			break ;
 		}
 	}
@@ -288,7 +311,6 @@ shared_ptr<Coroutine> CoManager::get_ready_co()
 	shared_ptr<Coroutine> co;
 
 	lock_guard<mutex> lock(_mutex);
-
 	// 唤醒睡眠协程 
 	auto now = now_ms();
 	auto beg_iter = _lst_sleep.begin();
@@ -300,7 +322,7 @@ shared_ptr<Coroutine> CoManager::get_ready_co()
 		_lst_sleep.erase(beg_iter, end_iter);
 	}
 
-	// 获取�??一�??就绪协程
+	// 获取就绪协程
 	if (_lst_ready.size() > 0) {
 		co = _lst_ready.front();
 		_lst_ready.erase(_lst_ready.begin());
@@ -366,7 +388,16 @@ void CoManager::co_run(int id)
 {
 	auto co = g_manager.get_co(id);
 
-	co->_func();
+	try {
+		co->_func();
+	} catch (CoException& ex) {
+		printf(
+			"framework exception, code:%d, file:%s, line:%d\n", 
+			ex.code(), 
+			ex.file().c_str(), 
+			ex.line()
+		);
+	}
 
 	co->_state = FREE;
 	co->_init  = false;

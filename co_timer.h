@@ -18,6 +18,7 @@ enum CoTimerState
 	CO_TIMER_READY,
 	CO_TIMER_PROCESS,
 	CO_TIMER_FINISH,
+	CO_TIMER_CANCEL,
 };
 
 struct CoTimerInfo;
@@ -28,20 +29,27 @@ friend class CoTimer;
 friend class CoTimerInfo;
 public:
 	CoTimerId() = delete;
-	CoTimerId(const CoTimerId& id) = delete;
+//	CoTimerId(const CoTimerId& id) = delete;
 
 	CoTimerId& operator=(const CoTimerId& id) = delete;
 
+//	CoTimerId(CoTimerId&& id) {
+//		printf("############# CoTimerId(CoTimerId&& id)\n");
+//		swap(_ptr, id._ptr);
+//	}
+
+	CoTimerId(const CoTimerId& id) {
+		printf("############# CoTimerId(const CoTimerId& id)\n");
+		_ptr = id._ptr;
+	}
+
 private:
 	CoTimerId(shared_ptr<CoTimerInfo> ptr) {
+		printf("############# CoTimerId(shared_ptr<CoTimerInfo> ptr)\n");
 		_ptr = ptr;
 	}
 
-	CoTimerId(CoTimerId&& id) {
-		swap(_ptr, id._ptr);
-	}
-
-	weak_ptr<CoTimerInfo> _ptr;
+	shared_ptr<CoTimerInfo> _ptr;
 };
 
 struct CoTimerInfo 
@@ -59,65 +67,76 @@ public:
 
 	CoTimerId set(size_t delay_ms, const std::function<void()>& func) {
 		auto ptr = shared_ptr<CoTimerInfo>(new CoTimerInfo);
+		ptr->func = func;
+		return set(delay_ms, ptr);
+	}
+
+	CoTimerId set(size_t delay_ms, shared_ptr<CoTimerInfo> ptr) {
 		ptr->active_time = now_ms() + delay_ms;
 		ptr->state = CO_TIMER_WAIT;
-		ptr->func  = func;
-		lock_guard<mutex> lock(_mutex);
-		_map_list_iter[ptr] = _list.insert(make_pair(ptr->active_time, ptr));	
+		{
+			lock_guard<mutex> lock(_mutex);
+			_map_list_iter[ptr] = _list.insert(make_pair(ptr->active_time, ptr));	
+		}
 		return CoTimerId(ptr);
 	}
 
-	bool cancel(const CoTimerId& id) {
-		auto ptr = id._ptr.lock();	
-		if (!ptr) {
+	bool cancel(CoTimerId& id) {
+		if (!id._ptr) {
+			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "CoTimerId invalid");
+		}
+		if (id._ptr->state == CO_TIMER_CANCEL) {
+			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "CoTimerId already cancel");
+		}
+		if (id._ptr->state == CO_TIMER_PROCESS || id._ptr->state == CO_TIMER_FINISH) {
 			return false;
 		}
 		lock_guard<mutex> lock(_mutex);
-		auto iter = _map_list_iter.find(ptr);
+		auto iter = _map_list_iter.find(id._ptr);
 		if (iter == _map_list_iter.end()) {
 			return false;
 		}
+		id._ptr->state = CO_TIMER_CANCEL;
 		_list.erase(iter->second);
 		_map_list_iter.erase(iter);
 		return true;
 	}
 
-	vector<function<void()>> get_expires() {
-		vector<function<void()>> expires;
+	shared_ptr<CoTimerInfo> get_expire() {
+		shared_ptr<CoTimerInfo> expire;
 		lock_guard<mutex> lock(_mutex);
 		auto now = now_ms();
-	//	printf(
-	//		"[%s] !!!!!!!!!!!!!!! get_expires, tid:%d, _list.size:%ld, now:%ld\n", 
-	//		date_ms().c_str(),
-	//		gettid(),
-	//		_list.size(),
-	//		now
-	//	);
+		if (_list.size() && now >= _list.begin()->first) {
+			expire = _list.begin()->second;
+			expire->state = CO_TIMER_READY;
+			_map_list_iter.erase(_list.begin()->second);
+			_list.erase(_list.begin());
+		}
+		return expire;
+	}
+
+	vector<shared_ptr<CoTimerInfo>> get_expires() {
+		vector<shared_ptr<CoTimerInfo>> expires;
+		lock_guard<mutex> lock(_mutex);
+		auto now = now_ms();
 		if (_list.size() && now >= _list.begin()->first) {
 			auto beg_iter = _list.begin();
 			auto end_iter = _list.lower_bound(now);
 			for (auto iter = beg_iter; iter != end_iter; iter++) {
-				expires.emplace_back(iter->second->func);
+				iter->second->state = CO_TIMER_READY;
+				expires.emplace_back(iter->second);
 				_map_list_iter.erase(iter->second);
 			}
 			_list.erase(beg_iter, end_iter);
-		//	printf(
-		//		"[%s] !!!!!!!!!!!!!!! get_expires, tid:%d, size:%ld\n", 
-		//		date_ms().c_str(),
-		//		gettid(),
-		//		expires.size()
-		//	);
 		}
 		return expires;
 	}
 
 	CoTimerState get_state(const CoTimerId& id) {
-		auto timer_id = id._ptr.lock();
-		if (!timer_id) {
-			return CO_TIMER_FINISH; 
+		if (!id._ptr) {
+			THROW_EXCEPTION(CO_ERROR_INNER_EXCEPTION, "CoTimerId invalid");
 		}
-		lock_guard<mutex> lock(_mutex);
-		return timer_id->state;
+		return id._ptr->state;
 	}
 
 private:

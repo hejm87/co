@@ -36,6 +36,7 @@ void semaphore_test();
 void semaphore_test1();
 void sleep_test();
 void timer_test();
+void timer_test1();
 void await_test();
 void await_test1();
 
@@ -55,7 +56,8 @@ int main()
 //	semaphore_test1();
 //	sleep_test();
 //	timer_test();
-	await_test();
+	timer_test1();
+//	await_test();
 //	await_test1();
 	return 0;
 }
@@ -644,30 +646,95 @@ void sleep_test()
 	assert(end - beg < 550);
 }
 
+//void timer_test()
+//{
+//	const int DELAY_MS = 500;
+//
+//	atomic<bool> is_set(false);
+//
+//	auto beg = now_ms();
+//
+//	printf("[%s] ############ ready to set timer, beg:%ld\n", date_ms().c_str(), beg);
+//	Singleton<CoTimer>::get_instance()->set(DELAY_MS, [&is_set] {
+//		printf("[%s] ############ tid:%d, cid:%d, timer trigger\n", date_ms().c_str(), gettid(), getcid());
+//		is_set = true;
+//	});
+//
+//	while (!is_set) {
+//		;
+//	}
+//
+//	auto end = now_ms();
+//
+//	printf("cost:%ldms\n", end - beg);
+//
+//	assert(end - beg >= 500);
+//	assert(end - beg < 550);
+//}
+
 void timer_test()
 {
-	const int DELAY_MS = 500;
+	const int SLEEP_MS = 100;
 
-	atomic<bool> is_set(false);
-
-	auto beg = now_ms();
-
-	printf("[%s] ############ ready to set timer, beg:%ld\n", date_ms().c_str(), beg);
-	Singleton<CoTimer>::get_instance()->set(DELAY_MS, [&is_set] {
-		printf("[%s] ############ tid:%d, cid:%d, timer trigger\n", date_ms().c_str(), gettid(), getcid());
-		is_set = true;
+	auto id1 = CoApi::set_timer(SLEEP_MS, [] {
+		CoApi::sleep_ms(SLEEP_MS);
+	});
+	auto id2 = CoApi::set_timer(SLEEP_MS, [] {
+		CoApi::sleep_ms(SLEEP_MS);
 	});
 
-	while (!is_set) {
-		;
+	assert(CoApi::cancel_timer(id2) == true);
+
+	usleep(10 * 1000);
+
+	assert(CoApi::get_timer_state(id1) == CO_TIMER_PROCESS);
+	assert(CoApi::get_timer_state(id2) == CO_TIMER_CANCEL);
+
+	usleep(200 * 1000);
+
+	assert(CoApi::get_timer_state(id1) == CO_TIMER_FINISH);
+
+	printf("all finish");
+}
+
+void timer_test1()
+{
+	const int TIMER_COUNT = 10;
+	const int TIMER_PERIOD = 100;
+
+	struct {
+		long expect_time;
+		long finish_time;
+	} check_timer[TIMER_COUNT];
+
+	atomic<int> end_count(0);
+
+	for (int i = 0; i < TIMER_COUNT; i++) {
+		auto delay_ms = (i + 1) * TIMER_PERIOD;
+		check_timer[i].expect_time = now_ms() + delay_ms;
+		CoApi::set_timer(delay_ms, [&end_count, &check_timer, i] {
+			check_timer[i].finish_time = now_ms();
+			end_count++;
+		});
 	}
 
-	auto end = now_ms();
+	while (end_count != TIMER_COUNT) {
+		usleep(100 * 1000);
+	}
 
-	printf("cost:%ldms\n", end - beg);
-
-	assert(end - beg >= 500);
-	assert(end - beg < 550);
+	for (int i = 0; i < TIMER_COUNT; i++) {
+		auto& e = check_timer[i];
+		printf(
+			"################ i:%d, expect:%ld, finish:%ld, delta:%ld\n", 
+			i, 
+			e.expect_time, 
+			e.finish_time, 
+			e.finish_time - e.expect_time
+		);
+		assert(e.finish_time >= e.expect_time);
+		assert(e.finish_time < e.expect_time + 10);
+	}
+	printf("all finish\n");
 }
 
 void await_test()
