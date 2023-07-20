@@ -21,6 +21,11 @@ simple coroutine framework
 10. CoSchedule代码优化
    (1) 把没用的lst_xxx队列删除   --> 完成
 11. 测试用例需要进行CoApi代码调整
+12. 单元测试使用gtest
+13. 协程切换性能
+
+[异步IO操作开发]
+
 
 [遗留问题]
 1. 协程设置4k栈时，throw异常会导致堆栈数据破坏问题

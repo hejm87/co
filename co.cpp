@@ -39,12 +39,13 @@ void CoSchedule::run()
 
 	getcontext(&_main_ctx);
 
-	while (!g_manager._is_stop) {
+	while (!g_manager._is_stop.load()) {
 
 		auto co = g_manager.get_ready_co();
 		if (!co) {
-			assert(g_manager._is_stop);
-			break ;
+		//	assert(g_manager._is_stop);
+		//	break ;
+			continue ;
 		}
 
 		_running_id = co->_id;
@@ -126,7 +127,8 @@ CoManager::CoManager()
 
 CoManager::~CoManager()
 {
-	_is_stop = true;
+//	_is_stop = true;
+	_is_stop.store(true);
 	_cv.notify_all();
 	for (auto& item : _threads) {
 		item.join();
@@ -245,7 +247,7 @@ shared_ptr<Coroutine> CoManager::get_ready_co()
 
 	unique_lock<mutex> lock(_mutex);
 
-	_cv.wait(lock, [this] {return _lst_ready.size() > 0 || _is_stop;});
+	_cv.wait(lock, [this] {return _lst_ready.size() > 0 || _is_stop.load();});
 
 	if (_lst_ready.size() > 0) {
 		co = _lst_ready.front();
