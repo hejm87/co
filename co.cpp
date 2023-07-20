@@ -203,7 +203,7 @@ CoTimerId CoManager::set_timer(size_t delay_ms, const std::function<void()>& fun
 	return _timer->set(delay_ms, func);
 }
 
-bool CoManager::cancel_timer(CoTimerId& id)
+int CoManager::cancel_timer(CoTimerId& id)
 {
 	return _timer->cancel(id);
 }

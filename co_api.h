@@ -53,7 +53,7 @@ public:
         return g_manager.set_timer(delay_ms, func);
     }
 
-	static bool cancel_timer(CoTimerId& id) {
+	static int cancel_timer(CoTimerId& id) {
         return g_manager.cancel_timer(id);
     }
 

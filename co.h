@@ -125,7 +125,7 @@ public:
 
 	CoTimerId set_timer(size_t delay_ms, const std::function<void()>& func);
 
-	bool cancel_timer(CoTimerId& id);
+	int cancel_timer(CoTimerId& id);
 
 	CoTimerState get_timer_state(const CoTimerId& id);
 
