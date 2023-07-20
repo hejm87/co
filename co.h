@@ -13,6 +13,7 @@
 
 #include <mutex>
 #include <thread>
+#include <condition_variable>
 
 #include <map>
 #include <list>
@@ -27,9 +28,9 @@ using namespace std;
 class CoApi;
 
 const int DEFAULT_STACK_SZIE = 100 * 1024;
-const int MAX_COROUTINE_SIZE = 1000;
-const int CO_THREAD_SIZE = 2;
-const int TIMER_THREAD_SIZE = 2;
+const int MAX_COROUTINE_COUNT = 1000;
+const int CO_THREAD_COUNT = 2;
+const int CO_TIMER_THREAD_COUNT = 2;
 
 enum CoState
 {
@@ -97,10 +98,6 @@ private:
 	void process();
 
 public:
-	vector<shared_ptr<Coroutine>> _lst_free;
-	vector<shared_ptr<Coroutine>> _lst_ready;
-	vector<shared_ptr<Coroutine>> _lst_resume;	// 将协程放回g_manager，避免调度线程竞�??
-
 	ucontext_t _main_ctx;
 
 	int	 _running_id;
@@ -142,8 +139,6 @@ public:
 
 	void add_free_co(const shared_ptr<Coroutine>& co);
 
-	void add_free_co(const vector<shared_ptr<Coroutine>>& cos);
-
 	void add_ready_co(const shared_ptr<Coroutine>& co, bool priority = false);
 
 	void add_suspend_co(const shared_ptr<Coroutine>& co);
@@ -153,8 +148,6 @@ public:
 	void lock();
 
 	void unlock();
-
-	mutex* get_locker();
 
 	static void co_run(int id);
 
@@ -168,13 +161,12 @@ private:
 
 	map<int, shared_ptr<Coroutine>> _map_suspend;
 
-	multimap<long, int> _lst_sleep;
-
-	CoTimer _timer;
+	CoTimer* _timer;
 
 	vector<thread> _threads;
 
 	mutex _mutex;
+	condition_variable _cv;
 };
 
 template <class T>

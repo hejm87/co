@@ -142,7 +142,6 @@ void CoSemaphore::wait()
                     };
                 }
                 _lst_wait.push_back(co);
-               // _value.store(unlock_value);
 
                 co->_state = SUSPEND;
 		        co->_suspend_state = SUSPEND_LOCK;

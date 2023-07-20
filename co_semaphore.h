@@ -5,12 +5,10 @@
 #include <list>
 #include "co_exception.h"
 #include "utils.h"
-//#include "common/semaphore.h"
-
 
 using namespace std;
 
-#define __SEM_DEBUG
+//#define __SEM_DEBUG
 
 const int _MAX_SEM_POSITIVE = 1073741823;
 const int _MAX_SEM_NEGATIVE = -1073741824;

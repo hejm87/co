@@ -35,18 +35,6 @@ public:
 	virtual void close() = 0;
 
 	virtual bool is_close() = 0;
-
-//	bool is_close() {
-//		bool closed;
-//		_co_mutex.lock();
-//		closed = _closed;
-//		_co_mutex.unlock();
-//		return closed;
-//	}
-
-//protected:
-//	bool _closed;
-//	CoMutex _co_mutex;
 };
 
 template <class T>

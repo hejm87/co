@@ -2,7 +2,6 @@
 #include <assert.h>
 #include <sched.h>
 #include "co.h"
-#include "co_timer.h"
 #include "co_exception.h"
 #include "utils.h"
 #include "common/common.h"
@@ -42,15 +41,11 @@ void CoSchedule::run()
 
 	while (!g_manager._is_stop) {
 
-		process();
-
-		if (!_lst_ready.size()) {
-			usleep(1000);
-			continue ;
+		auto co = g_manager.get_ready_co();
+		if (!co) {
+			assert(g_manager._is_stop);
+			break ;
 		}
-
-		auto co = _lst_ready.front();	
-		_lst_ready.erase(_lst_ready.begin());
 
 		_running_id = co->_id;
 
@@ -101,11 +96,6 @@ void CoSchedule::yield()
 	switch_to_main();
 }
 
-//void CoSchedule::resume(shared_ptr<Coroutine> co)
-//{
-//	_lst_resume.push_back(co);
-//}
-
 void CoSchedule::switch_to_main(const function<void()>& do_after_switch_func)
 {
 	assert(_running_id != -1);
@@ -115,88 +105,49 @@ void CoSchedule::switch_to_main(const function<void()>& do_after_switch_func)
 	swapcontext(&(co->_ctx), &_main_ctx);
 }
 
-void CoSchedule::process()
-{
-	// 将空闲协程放回g_manager
-	g_manager.add_free_co(_lst_free);
-	_lst_free.clear();
-
-	// 将待resume协程放回g_manager
-	for (auto& co : _lst_resume) {
-		g_manager.add_ready_co(co);
-	}
-	_lst_resume.clear();
-
-	// 从g_manager获取就绪协程
-	auto co = g_manager.get_ready_co();
-	if (co) {
-	//	printf(
-	//		"[%s] +++++++++++++++, CoSchedule::process, ready co, tid:%d, cid:%d\n", 
-	//		date_ms().c_str(),
-	//		gettid(),
-	//		co->_id	
-	//	);
-		_lst_ready.push_back(co);
-	}
-}
-
 CoManager::CoManager()
 {
-	for (int i = 0; i < MAX_COROUTINE_SIZE; i++) {
+	for (int i = 0; i < MAX_COROUTINE_COUNT; i++) {
 		auto ptr = shared_ptr<Coroutine>(new Coroutine(i));
 		_lst_co.push_back(ptr);
 		_lst_free.push_back(ptr);
 	}
 
-	for (int i = 0; i < CO_THREAD_SIZE; i++) {
+	for (int i = 0; i < CO_THREAD_COUNT; i++) {
 		_threads.emplace_back([] {
 			auto ptr = shared_ptr<CoSchedule>(new CoSchedule);
 			ptr->run();
 		});
 	}
+
+	_timer = new CoTimer;
+	_timer->init(CO_TIMER_THREAD_COUNT);
 }
 
 CoManager::~CoManager()
 {
 	_is_stop = true;
+	_cv.notify_all();
 	for (auto& item : _threads) {
 		item.join();
 	}
+	delete _timer;
+	_timer = NULL;
 }
 
 bool CoManager::create(const function<void()>& func)
 {
-	lock_guard<mutex> lock(_mutex);
-
-	if (!_lst_free.size()) {
-		return false;
-	}
-
-	auto co = _lst_free.front();	
-	_lst_free.erase(_lst_free.begin());
-	_lst_ready.push_back(co);
-
-	co->_state = RUNNABLE;
-	co->_func  = func;
-
-	return true;
+	auto co = create_with_co(func);
+	return co ? true : false;
 }
 
 shared_ptr<Coroutine> CoManager::create_with_co(const function<void()>& func)
 {
-	shared_ptr<Coroutine> co;
-
-	lock_guard<mutex> lock(_mutex);
-
-	if (_lst_free.size()) {
-
-		co = _lst_free.front();
-
-		_lst_free.erase(_lst_free.begin());
-		_lst_ready.push_back(co);
-
-		co->_state = RUNNABLE;	
+	auto co = get_free_co();
+	if (co) {
+		co->_state = RUNNABLE;
 		co->_func  = func;
+		add_ready_co(co);
 	}
 	return co;
 }
@@ -237,26 +188,29 @@ void CoManager::sleep_ms(unsigned int msec)
 
 	{
 		lock_guard<mutex> lock(_mutex);
-		_map_suspend[co->_id] = co;	
-		_lst_sleep.insert(make_pair(now_ms() + msec, co->_id));
+		_map_suspend[co->_id] = co;
 	}
+
+	_timer->set(msec, [this, co] {
+		add_ready_co(co);
+	}, false);
 
 	g_schedule->switch_to_main();
 }
 
 CoTimerId CoManager::set_timer(size_t delay_ms, const std::function<void()>& func)
 {
-	return _timer.set(delay_ms, func);
+	return _timer->set(delay_ms, func);
 }
 
 bool CoManager::cancel_timer(CoTimerId& id)
 {
-	return _timer.cancel(id);
+	return _timer->cancel(id);
 }
 
 CoTimerState CoManager::get_timer_state(const CoTimerId& id)
 {
-	return _timer.get_state(id);
+	return _timer->get_state(id);
 }
 
 shared_ptr<Coroutine> CoManager::get_co(int id)
@@ -287,46 +241,19 @@ shared_ptr<Coroutine> CoManager::get_running_co()
 
 shared_ptr<Coroutine> CoManager::get_ready_co()
 {
-	// 获取定时器任务
-	while (1) {
-		auto expire = _timer.get_expire();
-		if (!expire) {
-			break ;
-		}
-		auto co = create([expire] {
-			expire->state = CO_TIMER_PROCESS;
-			expire->func();
-			expire->state = CO_TIMER_FINISH;
-		});
-		if (!co) {
-			_timer.set(0, expire);
-			break ;
-		}
-	}
-
-//	if (expires.size() > 0) {
-//		printf("[%s] +++++++++++++ co_manager, get_ready_co, expires.size:%ld\n", date_ms().c_str(), expires.size());
-//	}
-
 	shared_ptr<Coroutine> co;
 
-	lock_guard<mutex> lock(_mutex);
-	// 唤醒睡眠协程 
-	auto now = now_ms();
-	auto beg_iter = _lst_sleep.begin();
-	if (_lst_sleep.size() > 0 && beg_iter->first <= now) {
-		auto end_iter = _lst_sleep.lower_bound(now);
-		for (auto iter = beg_iter; iter != end_iter; iter++) {
-			_lst_ready.push_front(_lst_co[iter->second]);
-		}
-		_lst_sleep.erase(beg_iter, end_iter);
-	}
+	unique_lock<mutex> lock(_mutex);
 
-	// 获取就绪协程
+	_cv.wait(lock, [this] {return _lst_ready.size() > 0 || _is_stop;});
+
 	if (_lst_ready.size() > 0) {
 		co = _lst_ready.front();
-		_lst_ready.erase(_lst_ready.begin());
+		_lst_ready.pop_front();
 	}
+
+	lock.unlock();
+
 	return co;
 }
 
@@ -336,22 +263,17 @@ void CoManager::add_free_co(const shared_ptr<Coroutine>& co)
 	_lst_free.push_back(co);
 }
 
-void CoManager::add_free_co(const vector<shared_ptr<Coroutine>>& cos)
-{
-	lock_guard<mutex> lock(_mutex);
-	if (cos.size() > 0) {
-		_lst_free.insert(_lst_free.end(), cos.begin(), cos.end());
-	}
-}
-
 void CoManager::add_ready_co(const shared_ptr<Coroutine>& co, bool priority)
 {
-	lock_guard<mutex> lock(_mutex);
-	if (priority) {
-		_lst_ready.push_front(co);
-	} else {
-		_lst_ready.push_back(co);
+	{
+		lock_guard<mutex> lock(_mutex);
+		if (priority) {
+			_lst_ready.push_front(co);
+		} else {
+			_lst_ready.push_back(co);
+		}
 	}
+	_cv.notify_one();
 }
 
 void CoManager::add_suspend_co(const shared_ptr<Coroutine>& co)
@@ -362,26 +284,21 @@ void CoManager::add_suspend_co(const shared_ptr<Coroutine>& co)
 
 bool CoManager::resume_co(int id)
 {
-	lock_guard<mutex> lock(_mutex);
-	auto iter = _map_suspend.find(id);
-	if (iter == _map_suspend.end()) {
-		return false;
+	shared_ptr<Coroutine> co;
+	{
+		lock_guard<mutex> lock(_mutex);
+		auto iter = _map_suspend.find(id);
+		if (iter == _map_suspend.end()) {
+			return false;
+		}
+		_map_suspend.erase(id);
+
+		co = iter->second;
+		co->_state = RUNNABLE;
+		co->_suspend_state = SUSPEND_NONE;
 	}
-	_map_suspend.erase(id);
-
-	auto co = iter->second;
-
-	co->_state = RUNNABLE;
-	co->_suspend_state = SUSPEND_NONE;
-
-	_lst_ready.push_front(co);
-
+	add_ready_co(co);
 	return true;
-}
-
-mutex* CoManager::get_locker()
-{
-	return &_mutex;
 }
 
 void CoManager::co_run(int id)

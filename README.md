@@ -16,9 +16,11 @@ simple coroutine framework
 7. 异常类型 --> 完成
 8. 内核框架调试日志打印
 9. 调度线程处理协程调度优化
-   (1) 目前CoSchedule为空闲时每毫秒进行轮询，需优化
-   (2) 定时器需要CoSchdule进行触发
-10. 测试用例需要进行CoApi代码调整
+   (1) 目前CoSchedule为空闲时每毫秒进行轮询，需优化   --> 完成
+   (2) 定时器需要CoSchdule进行触发  --> 完成
+10. CoSchedule代码优化
+   (1) 把没用的lst_xxx队列删除   --> 完成
+11. 测试用例需要进行CoApi代码调整
 
 [遗留问题]
 1. 协程设置4k栈时，throw异常会导致堆栈数据破坏问题

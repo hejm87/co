@@ -56,9 +56,9 @@ int main()
 //	semaphore_test1();
 //	sleep_test();
 //	timer_test();
-	timer_test1();
+//	timer_test1();
 //	await_test();
-//	await_test1();
+	await_test1();
 	return 0;
 }
 
@@ -379,12 +379,15 @@ void channel_cache_test()
 	}
 
 	g_manager.create([&chan, &end_count] {
+		printf("[%s] ############### tid:%d, cid:%d, reader start\n", date_ms().c_str(), gettid(), getcid());
 		g_manager.sleep_ms(SLEEP_MS);
+		printf("[%s] ############### tid:%d, cid:%d, reader sleep finish\n", date_ms().c_str(), gettid(), getcid());
 		do {
 			try {
 				int v;
 				for (int i = 0; i < LOOP; i++) {
 			//	for (int i = 0; i < 1; i++) {
+					printf("[%s] ############### tid:%d, cid:%d, before read\n", date_ms().c_str(), gettid(), getcid());
 					chan >> v;
 					assert(v == i);
 					printf("[%s] ############### tid:%d, cid:%d, read value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
@@ -499,7 +502,7 @@ void semaphore_test()
 	atomic<bool> set_end(false);
 	CoSemaphore sem(0);
 
-	printf("sem_value:%d\n", sem.get_value());
+	printf("[%s] ###############, sem_value:%d\n", date_ms().c_str(), sem.get_value());
 
 	beg_ms = now_ms();
 
@@ -621,16 +624,20 @@ void semaphore_test1()
 
 void sleep_test()
 {
-	const int SLEEP_MS = 500;
+	const int LOOP = 50;
+	const int SLEEP_MS = 10;
 
 	atomic<bool> is_set(false);
 
 	auto beg = now_ms();
 
 	g_manager.create([&is_set, SLEEP_MS] {
-		printf("[%s] ############ tid:%d, cid:%d, before sleep\n", date_ms().c_str(), gettid(), getcid());
-		g_manager.sleep_ms(SLEEP_MS);
-		printf("[%s] ############ tid:%d, cid:%d, after sleep\n", date_ms().c_str(), gettid(), getcid());
+		auto co_beg = now_ms();
+		for (int i = 0; i < LOOP; i++) {
+			g_manager.sleep_ms(SLEEP_MS);
+		}
+		auto co_end = now_ms();
+		printf("[%s] ############### tid:%d, cid:%d, co_total_sleep:%ldms\n", date_ms().c_str(), gettid(), getcid(), co_end - co_beg);
 		is_set = true;
 	});
 
@@ -642,35 +649,9 @@ void sleep_test()
 
 	printf("cost:%ldms\n", end - beg);
 
-	assert(end - beg >= 500);
-	assert(end - beg < 550);
+	assert(end - beg >= LOOP * SLEEP_MS);
+	assert(end - beg < LOOP * SLEEP_MS + (LOOP * SLEEP_MS) / 10);
 }
-
-//void timer_test()
-//{
-//	const int DELAY_MS = 500;
-//
-//	atomic<bool> is_set(false);
-//
-//	auto beg = now_ms();
-//
-//	printf("[%s] ############ ready to set timer, beg:%ld\n", date_ms().c_str(), beg);
-//	Singleton<CoTimer>::get_instance()->set(DELAY_MS, [&is_set] {
-//		printf("[%s] ############ tid:%d, cid:%d, timer trigger\n", date_ms().c_str(), gettid(), getcid());
-//		is_set = true;
-//	});
-//
-//	while (!is_set) {
-//		;
-//	}
-//
-//	auto end = now_ms();
-//
-//	printf("cost:%ldms\n", end - beg);
-//
-//	assert(end - beg >= 500);
-//	assert(end - beg < 550);
-//}
 
 void timer_test()
 {
@@ -683,15 +664,20 @@ void timer_test()
 		CoApi::sleep_ms(SLEEP_MS);
 	});
 
-	assert(CoApi::cancel_timer(id2) == true);
+	assert(CoApi::cancel_timer(id2) == 0);
 
 	usleep(10 * 1000);
 
-	assert(CoApi::get_timer_state(id1) == CO_TIMER_PROCESS);
+//	printf("id1.state:%d\n", CoApi::get_timer_state(id1));
+//	printf("id2.state:%d\n", CoApi::get_timer_state(id2));
+
+	assert(CoApi::get_timer_state(id1) == CO_TIMER_WAIT);
 	assert(CoApi::get_timer_state(id2) == CO_TIMER_CANCEL);
 
-	usleep(200 * 1000);
+	usleep(100 * 1000);
+	assert(CoApi::get_timer_state(id1) == CO_TIMER_PROCESS);
 
+	usleep(200 * 1000);
 	assert(CoApi::get_timer_state(id1) == CO_TIMER_FINISH);
 
 	printf("all finish");

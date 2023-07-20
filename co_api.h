@@ -2,6 +2,7 @@
 #define __CO_API_H__
 
 #include "co.h"
+#include "co_timer.h"
 #include "common/common.h"
 
 using namespace std;
