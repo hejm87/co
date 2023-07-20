@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <list>
+#include "common/semaphore.h"
 #include "co_exception.h"
 #include "utils.h"
 
@@ -14,6 +15,22 @@ const int _MAX_SEM_POSITIVE = 1073741823;
 const int _MAX_SEM_NEGATIVE = -1073741824;
 
 class Coroutine;
+
+class CoSemWaiter
+{
+public:
+    CoSemWaiter(int cid);
+    CoSemWaiter(Semaphore* sem);
+
+    void signal();
+
+private:
+    bool _is_co_env;
+    union {
+        int co_waiter;
+        Semaphore* sem_waiter;
+    } _waiter;
+};
 
 class CoSemaphore
 {
@@ -62,7 +79,8 @@ private:
     // 信号量值（31位）|锁标识（1位）
     atomic<int> _value;
 
-    list<shared_ptr<Coroutine>> _lst_wait;
+    list<CoSemWaiter> _lst_wait;
+
 
 #ifdef __SEM_DEBUG
     atomic<int> _send_count;

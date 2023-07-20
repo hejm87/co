@@ -3,7 +3,7 @@
 #include "co.h"
 #include "co_semaphore.h"
 #include "utils.h"
-#include "common/semaphore.h"
+//#include "common/semaphore.h"
 
 #define IS_LOCK(x)    ((x) & 0x1 ? true : false)
 
@@ -16,6 +16,33 @@
 
 const int TRY_LOCK_COUNT = 10;
 
+//###############################################
+//              CoSemWaiter
+//###############################################
+CoSemWaiter::CoSemWaiter(int cid)
+{
+    _is_co_env = true;
+    _waiter.co_waiter = cid;
+}
+
+CoSemWaiter::CoSemWaiter(Semaphore* sem)
+{
+    _is_co_env = false;
+    _waiter.sem_waiter = sem;
+}
+
+void CoSemWaiter::signal()
+{
+    if (_is_co_env) {
+        g_manager.resume_co(_waiter.co_waiter);
+    } else {
+        _waiter.sem_waiter->signal();
+    }
+}
+
+//###############################################
+//              CoSemaphore
+//###############################################
 int CoSemaphore::get_value()
 {
     return GET_VALUE(_value.load());
@@ -54,7 +81,7 @@ bool CoSemaphore::signal()
                //     GET_VALUE(_value.load())
                // );
                 if (_lst_wait.size()) {
-                    auto co = _lst_wait.front();
+                    auto waiter = _lst_wait.front();
                     _lst_wait.pop_front();
                    // printf(
                    //     "[%s] sssssssssssssss, tid:%d, cid:%d, signal, resume wait_cid:%d\n", 
@@ -64,8 +91,9 @@ bool CoSemaphore::signal()
                    //     co->_id
                    // );
                     _value.store(unlock_value);
-                    auto ret = g_manager.resume_co(co->_id);
-                    assert(ret);
+                    waiter.signal();
+                   // auto ret = g_manager.resume_co(co->_id);
+                   // assert(ret);
                 } else {
                     _value.store(unlock_value);
                 }
@@ -131,20 +159,17 @@ void CoSemaphore::wait()
                     _value.store(unlock_value);
                     return ;
                 }
-                Semaphore sem;
-                shared_ptr<Coroutine> co;
-                if (is_in_co_env()) {
-                    co = g_manager.get_running_co();
-                } else {
-                    co = g_manager.get_free_co();
-                    co->_func = [this, &sem] {
-                        sem.signal();
-                    };
-                }
-                _lst_wait.push_back(co);
 
-                co->_state = SUSPEND;
-		        co->_suspend_state = SUSPEND_LOCK;
+                Semaphore sem;
+                if (is_in_co_env()) {
+                    auto co = g_manager.get_running_co();
+                    co->_state = SUSPEND;
+		            co->_suspend_state = SUSPEND_LOCK;
+                    _lst_wait.push_back(CoSemWaiter(co->_id));
+                } else {
+                    _lst_wait.push_back(CoSemWaiter(&sem));
+                }
+
                 if (is_in_co_env()) {
                    // printf(
                    //     "[%s] sssssssssssssss, tid:%d, cid:%d, suspend to wait sem\n", 
@@ -165,7 +190,7 @@ void CoSemaphore::wait()
                    //     gettid(),
                    //     getcid()
                    // );
-                    g_manager.add_suspend_co(co);
+                   // g_manager.add_suspend_co(co);
                     _value.store(unlock_value);
                     sem.wait();
                 }

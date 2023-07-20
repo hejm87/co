@@ -50,7 +50,7 @@ int main()
 //	channel_test();
 //	channel_test1();
 //	channel_test2();
-//	channel_cache_test();
+	channel_cache_test();
 //	channel_cache_test1();
 //	semaphore_test();
 //	semaphore_test1();
@@ -58,7 +58,7 @@ int main()
 //	timer_test();
 //	timer_test1();
 //	await_test();
-	await_test1();
+//	await_test1();
 	return 0;
 }
 

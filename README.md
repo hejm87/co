@@ -12,7 +12,7 @@ simple coroutine framework
 3. create co 带返回值	--> 完成
 4. co api封装	--> 完成
 5. 非协程环境getcid()返回-1 --> 完成
-6. create_co可以强制多生成协程
+6. create_co可以强制多生成协程（信号量类进行修改，避免使用create_co）	--> 完成
 7. 异常类型 --> 完成
 8. 内核框架调试日志打印
 9. 调度线程处理协程调度优化
@@ -24,3 +24,4 @@ simple coroutine framework
 
 [遗留问题]
 1. 协程设置4k栈时，throw异常会导致堆栈数据破坏问题
+2. 好像遗留一个CoManager结束时，某个协程线程卡顿导致CoManager不能正常释放问题（概率非常低）
