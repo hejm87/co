@@ -13,7 +13,7 @@
 //    virtual string to_buf() = 0;
 //};
 
-class EpollChannel
+class EpollChannel : enable_shared_from_this<EpollEngine>
 {
 public:
     EpollChannel();
@@ -31,7 +31,9 @@ public:
 
     virtual bool on_send() {;}
     virtual bool on_recv(const char* data, size_t size) {;}
-    virtual void on_close(int error) {;}
+    virtual void on_close() {;}
+    virtual void on_error(int error) {;}
+    virtual void on_timeout() {;}
 
     int fd() {
         return _fd;
@@ -57,12 +59,20 @@ public:
         int ret;
         {
             lock_guard<mutex> lock(_mutex);
-            if (_w_buf.used_size() > 0) {
+            auto send_size = _w_buf.used_size();
+            if (send_size > 0) {
                 return true;
             }
-            ret = send(_fd, _w_buf.data(), _w_buf.used_size());
+            ret = send(_fd, _w_buf.data(), send_size);
             if (ret > 0) {
                 _w_buf.skip(ret);
+                if (send_size == ret) {
+                    auto e = _engine.lock();
+                    if (!e) {
+                        throw runtime_error("channel.on_send, EpollEngine is invalid");
+                    }
+                    e.del(shared_from_this(), EPOLL_WRITE);
+                }
             }
         }
         if (ret > 0 || errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -93,6 +103,14 @@ public:
     }
 
     virtual void on_close(int error) {
+        ;
+    }
+
+    virtual void on_error(int error) {
+        ;
+    }
+
+    virtual void on_timeout() {
         ;
     }
 

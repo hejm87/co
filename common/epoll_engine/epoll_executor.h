@@ -3,44 +3,69 @@
 
 #include <sys/epoll.h>
 
+#include <mutex>
+#include <thread>
 #include <memory>
 #include <functional>
 
+#include <map>
+#include <vector>
+
+#include "epoll_channel.h"
+
+using namespace std;
+
 enum EpollEvent
 {
-    EPOLL_READ  = 0x1,
-    EPOLL_WRITE = 0x2,
+    EPOLL_RECV = 0x1,
+    EPOLL_SEND = 0x2,
+};
+
+struct EpollInfo
+{
+    int epoll_id;
+    int pipes[2];
+    struct epoll_event* events;
 };
 
 class EpollChannel;
 
-class EpollExecutor
+class EpollEngine : enable_shared_from_this<EpollEngine>
 {
 public:
-    EpollExecutor(int count);
-    ~EpollExecutor();
+    EpollEngine(int thread_count, int max_conn_count);
+    ~EpollEngine();
 
-    int set(shared_ptr<EpollChannel> chan, EpollEvent ev, size_t timeout);
-    int del(shared_ptr<EpollChannel> chan, EpollEvent ev);
+    int set(int fd, EpollEvent ev, size_t timeout, shared_ptr<void> argv = nullptr);
+    int del(int fd, EpollEvent ev);
 
-    void set_end() {
-        close(_pipes[0]);
-    }
+    void terminate(bool wait = true);
+
+protected:
+    virtual void on_send(int fd, shared_ptr<void> argv) {;}
+    virtual void on_recv(int fd, shared_ptr<void> argv, char* data, size_t size) {;}
+    virtual void on_close(int fd, shared_ptr<void> argv) {;}
+    virtual void on_error(int fd, shared_ptr<void> argv, int error) {;}
 
 private:
-    void run();
+    bool create_epoll_info(EpollInfo& info);
+    bool create_epoll_infos();
+    void run(int index);
+
+    shared_ptr<EpollChannel> get_channel(int fd);
 
 private:
-    int _epoll_id;
     int _max_count;
     int _cur_count;
-    int _pipes[2];
 
-    map<int, shared_ptr<EpollChannel>> _r_fd_chan;
-    map<int, shared_ptr<EpollChannel>> _w_fd_chan;
+    map<int, shared_ptr<void>> _r_fd_argv;
+    map<int, shared_ptr<void>> _w_fd_argv;
+
+    multimap<int, int>  _lst_timer;
 
     mutex   _mutex;
-    thread  _thread;
+    vector<thread>      _threads;
+    vector<EpollInfo>   _epoll_infos;
 };
 
 #endif
