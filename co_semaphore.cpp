@@ -2,7 +2,6 @@
 #include <assert.h>
 #include "co.h"
 #include "co_semaphore.h"
-#include "utils.h"
 //#include "common/semaphore.h"
 
 #define IS_LOCK(x)    ((x) & 0x1 ? true : false)

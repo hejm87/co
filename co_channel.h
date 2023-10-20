@@ -7,7 +7,6 @@
 #include "common/semaphore.h"
 #include "co_semaphore.h"
 #include "co_exception.h"
-#include "utils.h"
 
 template <class T>
 class CoChannelSendItem

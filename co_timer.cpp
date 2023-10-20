@@ -1,5 +1,6 @@
 #include "co.h"
 #include "co_timer.h"
+#include "common/common_utils.h"
 
 CoTimer::CoTimer() {
 	_is_init = false;
@@ -29,7 +30,7 @@ void CoTimer::init(size_t thread_num) {
 
 CoTimerId CoTimer::set(size_t delay_ms, const std::function<void()>& func, bool deal_with_co) {
 	auto ptr = std::shared_ptr<CoTimerInfo>(new CoTimerInfo);
-	ptr->active_time  = now_ms() + (long)delay_ms;
+	ptr->active_time  = CommonUtils::now_ms() + (long)delay_ms;
     ptr->deal_with_co = deal_with_co;
 	ptr->func = func;
 	ptr->state.store((int)CO_TIMER_WAIT);
@@ -70,7 +71,7 @@ CoTimerState CoTimer::get_state(const CoTimerId& id) {
 		return CO_TIMER_UNKNOW;
 	}
 	auto state = (CoTimerState)(id._ptr->state.load());
-	if (state == CO_TIMER_WAIT && id._ptr->active_time <= now_ms()) {
+	if (state == CO_TIMER_WAIT && id._ptr->active_time <= CommonUtils::now_ms()) {
 		state = CO_TIMER_READY;
 	}
 	return state;
@@ -94,7 +95,7 @@ void CoTimer::run() {
 			std::lock_guard<std::mutex> lock(_mutex);
 			if (!_list.empty()) {
 				auto iter = _list.begin();	
-				auto delta = iter->first - now_ms();
+				auto delta = iter->first - CommonUtils::now_ms();
 				if (delta <= 0) {
 					ptr = iter->second;
 					_map_list_iter.erase(iter->second);

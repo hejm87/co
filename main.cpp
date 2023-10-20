@@ -12,7 +12,6 @@
 #include "co_channel.h"
 #include "co_semaphore.h"
 #include "co_timer.h"
-#include "utils.h"
 #include "common/common_utils.h"
 
 using namespace std;
@@ -67,7 +66,7 @@ void reuse_test()
 	int i = 0;
 	while (i < 10) {
 		auto ret = g_manager.create([i] {
-			printf("tid:%d, cid:%d, i:%d\n", gettid(), getcid(), i);
+			printf("tid:%d, cid:%d, i:%d\n", CommonUtils::gettid(), getcid(), i);
 		});
 		if (ret) {
 			i++;
@@ -87,7 +86,7 @@ void exception_test()
 			try {
 				throw to_string(i);
 			} catch (string& ex) {
-				printf("tid:%d, cid:%d, value:%s\n", gettid(), getcid(), ex.c_str());
+				printf("tid:%d, cid:%d, value:%s\n", CommonUtils::gettid(), getcid(), ex.c_str());
 			}
 			g_count++;	
 		});
@@ -106,10 +105,10 @@ void yield_test()
 	for (int i = 0; i < co_count; i++) {
 		g_manager.create([i] {
 			for (int j = 0; j < 3; j++) {
-				printf("############# tid:%d, cid:%d, value:%d\n", gettid(), getcid(), j);
+				printf("############# tid:%d, cid:%d, value:%d\n", CommonUtils::gettid(), getcid(), j);
 				g_manager.yield();
 			}
-			printf("############# tid:%d, cid:%d, exit\n", gettid(), getcid());
+			printf("############# tid:%d, cid:%d, exit\n", CommonUtils::gettid(), getcid());
 			g_count++;
 		});
 	}
@@ -139,10 +138,10 @@ void lock_test()
 			for (int i = 0; i < loop; i++) {
 				int now_total;
 				mutex.lock();
-				printf("[%s] ############### tid:%d, cid:%d, app.lock succeed\n", date_ms().c_str(), gettid(), getcid());
+				printf("[%s] ############### tid:%d, cid:%d, app.lock succeed\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 				now_total = ++total;
 				mutex.unlock();
-				printf("[%s] ############### tid:%d, cid:%d, app.unlock succeed, total:%d\n", date_ms().c_str(), gettid(), getcid(), now_total);
+				printf("[%s] ############### tid:%d, cid:%d, app.unlock succeed, total:%d\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid(), now_total);
 			}
 			end_count++;
 		});
@@ -152,7 +151,7 @@ void lock_test()
 		usleep(10 * 1000);
 	}
 
-	printf("[%s] after wait, a1:%d, a2:%d\n", date_ms().c_str(), co_count * loop, total);
+	printf("[%s] after wait, a1:%d, a2:%d\n", CommonUtils::date_ms().c_str(), co_count * loop, total);
 	assert(co_count * loop == total);
 }
 
@@ -164,18 +163,18 @@ void lock_test()
 //
 //	g_manager.create([&mutex] {
 //		mutex.lock();
-//		printf("[%s] ############### tid:%d, cid:%d, lock\n", date_ms().c_str(), gettid(), getcid());
+//		printf("[%s] ############### tid:%d, cid:%d, lock\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 //	});
 //
 //	g_manager.create([&mutex] {
 //		usleep(200 * 1000);
-//		printf("[%s] ############### tid:%d, cid:%d, ready to unlock\n", date_ms().c_str(), gettid(), getcid());
+//		printf("[%s] ############### tid:%d, cid:%d, ready to unlock\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 //		mutex.unlock();
-//		printf("[%s] ############### tid:%d, cid:%d, unlock\n", date_ms().c_str(), gettid(), getcid());
+//		printf("[%s] ############### tid:%d, cid:%d, unlock\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 //	});
 //
 //	sleep(1);
-//	printf("[%s] ############### all finish\n", date_ms().c_str());
+//	printf("[%s] ############### all finish\n", CommonUtils::date_ms().c_str());
 //}
 
 void lock_test1()
@@ -189,26 +188,26 @@ void lock_test1()
 	
 	g_manager.create([&mutex, &mtotal, &is_co_end] {
 		for (int i = 0; i < LOOP; i++) {
-		//	printf("[%s] ###############, tid:%d, cid:%d, before lock\n", date_ms().c_str(), gettid(), getcid());
+		//	printf("[%s] ###############, tid:%d, cid:%d, before lock\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 			mutex.lock();
-		//	printf("[%s] ###############, tid:%d, cid:%d, after lock\n", date_ms().c_str(), gettid(), getcid());
+		//	printf("[%s] ###############, tid:%d, cid:%d, after lock\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 			mtotal[0]++;
 			mutex.unlock();
-		//	printf("[%s] ###############, tid:%d, cid:%d, after unlock\n", date_ms().c_str(), gettid(), getcid());
+		//	printf("[%s] ###############, tid:%d, cid:%d, after unlock\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 		}
 		is_co_end = true;
-		printf("[%s] ###############, tid:%d, cid:%d, co finish\n", date_ms().c_str(), gettid(), getcid());
+		printf("[%s] ###############, tid:%d, cid:%d, co finish\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 	});
 
 	for (int i = 0; i < LOOP; i++) {
-	//	printf("[%s] ###############, tid:%d, before lock\n", date_ms().c_str(), gettid());
+	//	printf("[%s] ###############, tid:%d, before lock\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid());
 		mutex.lock();
-	//	printf("[%s] ###############, tid:%d, after lock\n", date_ms().c_str(), gettid());
+	//	printf("[%s] ###############, tid:%d, after lock\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid());
 		mtotal[1]++;
 		mutex.unlock();
-	//	printf("[%s] ###############, tid:%d, after unlock\n", date_ms().c_str(), gettid());
+	//	printf("[%s] ###############, tid:%d, after unlock\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid());
 	}
-	printf("[%s] ###############, tid:%d, main thread finish\n", date_ms().c_str(), gettid());
+	printf("[%s] ###############, tid:%d, main thread finish\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid());
 
 	while (!is_co_end) {
 		usleep(10 * 1000);
@@ -227,13 +226,13 @@ void channel_test()
 
 	g_manager.create([&chan] {
 		for (int i = 0; i < 100; i++) {
-			printf("[%s] ############ tid:%d, cid:%d, ready to write value:%d\n", date_ms().c_str(), gettid(), getcid(), i);
+			printf("[%s] ############ tid:%d, cid:%d, ready to write value:%d\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid(), i);
 			chan << i;
-			printf("[%s] ############ tid:%d, cid:%d, write value:%d\n", date_ms().c_str(), gettid(), getcid(), i);
+			printf("[%s] ############ tid:%d, cid:%d, write value:%d\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid(), i);
 		//	usleep(100 * 1000);
 		}
 		chan.close();
-		printf("[%s] ############ tid:%d, cid:%d, chan.close\n", date_ms().c_str(), gettid(), getcid());
+		printf("[%s] ############ tid:%d, cid:%d, chan.close\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 	});
 
 	g_manager.create([&chan, &is_end] {
@@ -241,22 +240,22 @@ void channel_test()
 		try {
 			do {
 				int v;
-				printf("[%s] ############ tid:%d, cid:%d, ready to read\n", date_ms().c_str(), gettid(), getcid());
+				printf("[%s] ############ tid:%d, cid:%d, ready to read\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 				chan >> v;
-				printf("[%s] ############ tid:%d, cid:%d, read value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
+				printf("[%s] ############ tid:%d, cid:%d, read value:%d\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid(), v);
 				assert(expect++ == v);
 			} while (1);
 		} catch (CoException& ex) {
 			printf("ex:%s\n", ex.get_desc().c_str());
 		}
 		is_end = true;
-		printf("[%s] ############ tid:%d, cid:%d, is end\n", date_ms().c_str(), gettid(), getcid());
+		printf("[%s] ############ tid:%d, cid:%d, is end\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 	});
 
 	while (!is_end) {
 		usleep(100 * 1000);
 	}
-	printf("[%s] ############ all finish\n", date_ms().c_str());
+	printf("[%s] ############ all finish\n", CommonUtils::date_ms().c_str());
 }
 
 void channel_test1()
@@ -272,24 +271,24 @@ void channel_test1()
 	g_manager.create([&chan] {
 		for (int i = 0; i < LOOP; i++) {
 			chan << i;
-		//	printf("[%s] ############ write channel, i:%d\n", date_ms().c_str(), i);
+		//	printf("[%s] ############ write channel, i:%d\n", CommonUtils::date_ms().c_str(), i);
 		}
-	//	printf("[%s] ############ write channel close\n", date_ms().c_str());
+	//	printf("[%s] ############ write channel close\n", CommonUtils::date_ms().c_str());
 		chan.close();
 	});
 
 	for (int i = 0; i < RECV_CO_COUNT; i++) {
 		g_manager.create([&chan, &mutex, &co_count, &end_count] {
-			printf("[%s] ############ cid:%d, running\n", date_ms().c_str(), getcid());
+			printf("[%s] ############ cid:%d, running\n", CommonUtils::date_ms().c_str(), getcid());
 			try {
 				do {
 					int v;	
 					chan >> v;
-				//	printf("[%s] ############ cid:%d, read channel succeed\n", date_ms().c_str(), getcid());
+				//	printf("[%s] ############ cid:%d, read channel succeed\n", CommonUtils::date_ms().c_str(), getcid());
 					mutex.lock();	
 					co_count[getcid()]++;
 					mutex.unlock();	
-				//	printf("[%s] ############ cid:%d, read channel succeed, after\n", date_ms().c_str(), getcid());
+				//	printf("[%s] ############ cid:%d, read channel succeed, after\n", CommonUtils::date_ms().c_str(), getcid());
 				} while (1);
 			} catch (CoException& ex) {
 				printf("cid:%d, ex:%s\n", getcid(), ex.get_desc().c_str());
@@ -324,9 +323,9 @@ void channel_test2()
 
 	g_manager.create([&chan] {
 		for (int i = 0; i < LOOP; i++) {
-			printf("[%s] ############### tid:%d, cid:%d, before, write %d\n", date_ms().c_str(), gettid(), getcid(), i);
+			printf("[%s] ############### tid:%d, cid:%d, before, write %d\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid(), i);
 			chan << i;
-			printf("[%s] ############### tid:%d, cid:%d, after, write %d\n", date_ms().c_str(), gettid(), getcid(), i);
+			printf("[%s] ############### tid:%d, cid:%d, after, write %d\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid(), i);
 		}
 		chan.close();
 	});
@@ -334,9 +333,9 @@ void channel_test2()
 	try {
 		do {
 			int v;
-			printf("[%s] ############### tid:%d, cid:%d, before read\n", date_ms().c_str(), gettid(), getcid());
+			printf("[%s] ############### tid:%d, cid:%d, before read\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 			chan >> v;
-			printf("[%s] ############### tid:%d, cid:%d, after read, value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
+			printf("[%s] ############### tid:%d, cid:%d, after read, value:%d\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid(), v);
 			recv_count++;
 		} while (1);
 	} catch (CoException& ex) {
@@ -360,15 +359,15 @@ void channel_cache_test()
 
 	g_manager.create([&chan, &start_read, &end_count] {
 		for (int i = 0; i < LOOP; i++) {
-			printf("[%s] ############### tid:%d, cid:%d, before, write\n", date_ms().c_str(), gettid(), getcid());
+			printf("[%s] ############### tid:%d, cid:%d, before, write\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 			chan << i;
-			printf("[%s] ############### tid:%d, cid:%d, after, write\n", date_ms().c_str(), gettid(), getcid());
+			printf("[%s] ############### tid:%d, cid:%d, after, write\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 		}
-		auto beg_ms = now_ms();
+		auto beg_ms = CommonUtils::now_ms();
 		start_read = true;
 		chan << 99;
-		auto end_ms = now_ms();
-		printf("[%s] ############### wait_ms:%ld, beg_ms:%ld, end_ms:%ld\n", date_ms().c_str(), end_ms - beg_ms, beg_ms, end_ms);
+		auto end_ms = CommonUtils::now_ms();
+		printf("[%s] ############### wait_ms:%ld, beg_ms:%ld, end_ms:%ld\n", CommonUtils::date_ms().c_str(), end_ms - beg_ms, beg_ms, end_ms);
 		assert(end_ms - beg_ms >= SLEEP_MS);
 		chan.close();
 		end_count++;
@@ -379,24 +378,24 @@ void channel_cache_test()
 	}
 
 	g_manager.create([&chan, &end_count] {
-		printf("[%s] ############### tid:%d, cid:%d, reader start\n", date_ms().c_str(), gettid(), getcid());
+		printf("[%s] ############### tid:%d, cid:%d, reader start\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 		g_manager.sleep_ms(SLEEP_MS);
-		printf("[%s] ############### tid:%d, cid:%d, reader sleep finish\n", date_ms().c_str(), gettid(), getcid());
+		printf("[%s] ############### tid:%d, cid:%d, reader sleep finish\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 		do {
 			try {
 				int v;
 				for (int i = 0; i < LOOP; i++) {
 			//	for (int i = 0; i < 1; i++) {
-					printf("[%s] ############### tid:%d, cid:%d, before read\n", date_ms().c_str(), gettid(), getcid());
+					printf("[%s] ############### tid:%d, cid:%d, before read\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 					chan >> v;
 					assert(v == i);
-					printf("[%s] ############### tid:%d, cid:%d, read value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
+					printf("[%s] ############### tid:%d, cid:%d, read value:%d\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid(), v);
 				}
-			//	printf("[%s] ############### tid:%d, cid:%d, sleep before read\n", date_ms().c_str(), gettid(), getcid());
+			//	printf("[%s] ############### tid:%d, cid:%d, sleep before read\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 			//	g_manager.sleep_ms(SLEEP_MS);
-				printf("[%s] ############### tid:%d, cid:%d, final read value\n", date_ms().c_str(), gettid(), getcid());
+				printf("[%s] ############### tid:%d, cid:%d, final read value\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 				chan >> v;
-				printf("[%s] ############### tid:%d, cid:%d, read value:%d\n", date_ms().c_str(), gettid(), getcid(), v);
+				printf("[%s] ############### tid:%d, cid:%d, read value:%d\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid(), v);
 			} catch (CoException& ex) {
 				printf("ex:%s\n", ex.get_desc().c_str());
 				break ;
@@ -432,62 +431,62 @@ void channel_cache_test1()
 	for (int i = 0; i < SEND_COUNT; i++) {
 		auto index = i;
 		g_manager.create([&chan, &send_total, &send_end_count, beg_value, index] {
-			printf("[%s] ############### cid:%d, send beg\n", date_ms().c_str(), getcid());
+			printf("[%s] ############### cid:%d, send beg\n", CommonUtils::date_ms().c_str(), getcid());
 			try {
 				for (int i = 0; i < LOOP; i++) {
 					auto score = beg_value[index] + i;
-					printf("[%s] ############### cid:%d, send, before value:%d\n", date_ms().c_str(), getcid(), score);
+					printf("[%s] ############### cid:%d, send, before value:%d\n", CommonUtils::date_ms().c_str(), getcid(), score);
 					chan << score;
-					printf("[%s] ############### cid:%d, send, after value:%d\n", date_ms().c_str(), getcid(), score);
+					printf("[%s] ############### cid:%d, send, after value:%d\n", CommonUtils::date_ms().c_str(), getcid(), score);
 					send_total += score;
 				}
 			} catch (CoException& ex) {
-				printf("[%s] ############### cid:%d, send, ex:%s\n", date_ms().c_str(), getcid(), ex.get_desc().c_str());
+				printf("[%s] ############### cid:%d, send, ex:%s\n", CommonUtils::date_ms().c_str(), getcid(), ex.get_desc().c_str());
 			}
 			send_end_count++;
-			printf("[%s] ############### cid:%d, send end\n", date_ms().c_str(), getcid());
+			printf("[%s] ############### cid:%d, send end\n", CommonUtils::date_ms().c_str(), getcid());
 		});
 	}
 
 	for (int i = 0; i < RECV_COUNT; i++) {
 		g_manager.create([&chan, &recv_total, &recv_end_count] {
-			printf("[%s] ############### cid:%d, recv beg\n", date_ms().c_str(), getcid());
+			printf("[%s] ############### cid:%d, recv beg\n", CommonUtils::date_ms().c_str(), getcid());
 			int v;
 			do {
 				try {
 					chan >> v;
-					printf("[%s] ############### cid:%d, recv, after value:%d\n", date_ms().c_str(), getcid(), v);
+					printf("[%s] ############### cid:%d, recv, after value:%d\n", CommonUtils::date_ms().c_str(), getcid(), v);
 					recv_total += v;
 				} catch (CoException& ex) {
-					printf("[%s] ############### cid:%d, recv, ex:%s\n", date_ms().c_str(), getcid(), ex.get_desc().c_str());
+					printf("[%s] ############### cid:%d, recv, ex:%s\n", CommonUtils::date_ms().c_str(), getcid(), ex.get_desc().c_str());
 					break ;
 				}
 			} while (1);
 			recv_end_count++;
-			printf("[%s] ############### cid:%d, recv end\n", date_ms().c_str(), getcid());
+			printf("[%s] ############### cid:%d, recv end\n", CommonUtils::date_ms().c_str(), getcid());
 		});
 	}
 
 	while (send_end_count != SEND_COUNT) {
 		printf(
 			"[%s] ############### send_end_count:%d, send_total:%d, recv_total:%d\n", 
-			date_ms().c_str(), 
+			CommonUtils::date_ms().c_str(), 
 			send_end_count.load(),
 			send_total.load(), 
 			recv_total.load()
 		);
 		usleep(100 * 1000);
 	}
-	printf("[%s] ############### send coroutines end\n", date_ms().c_str());
+	printf("[%s] ############### send coroutines end\n", CommonUtils::date_ms().c_str());
 	chan.close();
 
 	while (recv_end_count != RECV_COUNT) {
-		printf("[%s] ############### recv_end_count:%d\n", date_ms().c_str(), recv_end_count.load());
+		printf("[%s] ############### recv_end_count:%d\n", CommonUtils::date_ms().c_str(), recv_end_count.load());
 		usleep(100 * 1000);
 	}
-	printf("[%s] ############### recv coroutines end\n", date_ms().c_str());
+	printf("[%s] ############### recv coroutines end\n", CommonUtils::date_ms().c_str());
 
-	printf("[%s] ############### send_total:%d, recv_total:%d\n", date_ms().c_str(), send_total.load(), recv_total.load());
+	printf("[%s] ############### send_total:%d, recv_total:%d\n", CommonUtils::date_ms().c_str(), send_total.load(), recv_total.load());
 	assert(send_total == recv_total);
 }
 
@@ -502,15 +501,15 @@ void semaphore_test()
 	atomic<bool> set_end(false);
 	CoSemaphore sem(0);
 
-	printf("[%s] ###############, sem_value:%d\n", date_ms().c_str(), sem.get_value());
+	printf("[%s] ###############, sem_value:%d\n", CommonUtils::date_ms().c_str(), sem.get_value());
 
-	beg_ms = now_ms();
+	beg_ms = CommonUtils::now_ms();
 
 	g_manager.create([&sem] {
 		for (int i = 0; i < LOOP; i++) {
-		//	printf("[%s] ############### tid:%d, cid:%d, before signal\n", date_ms().c_str(), gettid(), getcid());
+		//	printf("[%s] ############### tid:%d, cid:%d, before signal\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 			sem.signal();
-		//	printf("[%s] ############### tid:%d, cid:%d, after signal\n", date_ms().c_str(), gettid(), getcid());
+		//	printf("[%s] ############### tid:%d, cid:%d, after signal\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 			usleep(2 * 1000);
 		}
 	});
@@ -518,15 +517,15 @@ void semaphore_test()
 	for (int i = 0; i < 2; i++) {
 		g_manager.create([&sem, &count, &set_end, &end_count, i] {
 			do {
-			//	printf("[%s] ############### tid:%d, cid:%d, before wait\n", date_ms().c_str(), gettid(), getcid());
+			//	printf("[%s] ############### tid:%d, cid:%d, before wait\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 				sem.wait();
-			//	printf("[%s] ############### tid:%d, cid:%d, after wait\n", date_ms().c_str(), gettid(), getcid());
+			//	printf("[%s] ############### tid:%d, cid:%d, after wait\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 				if (set_end) {
 					break ;
 				}
 				count++;
 			} while (1);
-			printf("[%s] ############### tid:%d, cid:%d, end\n", date_ms().c_str(), gettid(), getcid());
+			printf("[%s] ############### tid:%d, cid:%d, end\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid());
 			end_count++;
 		});
 	}
@@ -543,7 +542,7 @@ void semaphore_test()
 		usleep(10 * 1000);
 	}
 
-	end_ms = now_ms();
+	end_ms = CommonUtils::now_ms();
 
 	printf("all finish, count:%d, cost:%ldms\n", count.load(), end_ms - beg_ms);
 	assert(count == LOOP);
@@ -562,7 +561,7 @@ void semaphore_test1()
 
 	CoSemaphore sem;
 
-	beg_ms = now_ms();
+	beg_ms = CommonUtils::now_ms();
 
 	// coroutine writer
 	g_manager.create([&sem, &send_count, &end_count, &set_end] {
@@ -605,10 +604,10 @@ void semaphore_test1()
 	}).detach();
 
 	while (recv_count < LOOP) {
-		printf("[%s] ############### count:%d, LOOP:%d\n", date_ms().c_str(), recv_count.load(), LOOP);
+		printf("[%s] ############### count:%d, LOOP:%d\n", CommonUtils::date_ms().c_str(), recv_count.load(), LOOP);
 		usleep(100 * 1000);
 	}
-	printf("[%s] ############### LOOP is finish\n", date_ms().c_str());
+	printf("[%s] ############### LOOP is finish\n", CommonUtils::date_ms().c_str());
 	set_end = true;
 	sem.signal();
 	sem.signal();
@@ -616,8 +615,8 @@ void semaphore_test1()
 	while (end_count < 2) {
 		usleep(1);
 	}
-//	printf("[%s] ############### end gogogo\n", date_ms().c_str());
-	end_ms = now_ms();
+//	printf("[%s] ############### end gogogo\n", CommonUtils::date_ms().c_str());
+	end_ms = CommonUtils::now_ms();
 	printf("all finish, count:%d, cost:%ldms\n", recv_count.load(), end_ms - beg_ms);
 	assert(recv_count == LOOP);
 }
@@ -629,15 +628,15 @@ void sleep_test()
 
 	atomic<bool> is_set(false);
 
-	auto beg = now_ms();
+	auto beg = CommonUtils::now_ms();
 
 	g_manager.create([&is_set, SLEEP_MS] {
-		auto co_beg = now_ms();
+		auto co_beg = CommonUtils::now_ms();
 		for (int i = 0; i < LOOP; i++) {
 			g_manager.sleep_ms(SLEEP_MS);
 		}
-		auto co_end = now_ms();
-		printf("[%s] ############### tid:%d, cid:%d, co_total_sleep:%ldms\n", date_ms().c_str(), gettid(), getcid(), co_end - co_beg);
+		auto co_end = CommonUtils::now_ms();
+		printf("[%s] ############### tid:%d, cid:%d, co_total_sleep:%ldms\n", CommonUtils::date_ms().c_str(), CommonUtils::gettid(), getcid(), co_end - co_beg);
 		is_set = true;
 	});
 
@@ -645,7 +644,7 @@ void sleep_test()
 		;
 	}
 
-	auto end = now_ms();
+	auto end = CommonUtils::now_ms();
 
 	printf("cost:%ldms\n", end - beg);
 
@@ -697,9 +696,9 @@ void timer_test1()
 
 	for (int i = 0; i < TIMER_COUNT; i++) {
 		auto delay_ms = (i + 1) * TIMER_PERIOD;
-		check_timer[i].expect_time = now_ms() + delay_ms;
+		check_timer[i].expect_time = CommonUtils::now_ms() + delay_ms;
 		CoApi::set_timer(delay_ms, [&end_count, &check_timer, i] {
-			check_timer[i].finish_time = now_ms();
+			check_timer[i].finish_time = CommonUtils::now_ms();
 			end_count++;
 		});
 	}
@@ -729,7 +728,7 @@ void await_test()
 
 	atomic<int> co_end_count(0);
 
-	auto beg = now_ms();
+	auto beg = CommonUtils::now_ms();
 	auto a = CoApi::create([] {
 		CoApi::sleep_ms(100);
 		return ;
@@ -738,7 +737,7 @@ void await_test()
 	for (int i = 0; i < CO_COUNT; i++) {
 		CoApi::create([&a, &co_end_count, beg] {
 			a.wait();
-			auto end = now_ms();
+			auto end = CommonUtils::now_ms();
 			assert(end - beg >= 100);
 			co_end_count++;
 		});
@@ -749,7 +748,7 @@ void await_test()
 		usleep(10 * 1000);
 	}
 
-	auto end = now_ms();
+	auto end = CommonUtils::now_ms();
 	assert(end - beg >= 100);
 	printf("all finish\n");
 }
@@ -760,7 +759,7 @@ void await_test1()
 
 	atomic<int> co_end_count(0);
 
-	auto beg = now_ms();
+	auto beg = CommonUtils::now_ms();
 	auto a = CoApi::create([]() -> int {
 		CoApi::sleep_ms(10);
 		return 99;
@@ -770,7 +769,7 @@ void await_test1()
 		CoApi::create([&a, &co_end_count, beg] {
 			auto v = a.wait();
 			printf("coroutine, wait, v:%d\n", v);
-			auto end = now_ms();
+			auto end = CommonUtils::now_ms();
 			assert(v == 99);
 			assert(end - beg >= 10);
 			co_end_count++;
@@ -784,7 +783,7 @@ void await_test1()
 		usleep(1 * 1000);
 	}
 
-	auto end = now_ms();
+	auto end = CommonUtils::now_ms();
 	assert(end - beg >= 10);
 	printf("all finish\n");
 }

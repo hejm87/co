@@ -5,7 +5,6 @@
 #include <list>
 #include "common/semaphore.h"
 #include "co_exception.h"
-#include "utils.h"
 
 using namespace std;
 

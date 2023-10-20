@@ -6,7 +6,7 @@
 #include <utility>
 #include <exception>
 
-#include "utils.h"
+#include "common/common_utils.h"
 
 using namespace std;
 
@@ -39,7 +39,7 @@ public:
         _code = code;
         _file = file;
         _line = line;
-        _msg  = format_string(fmt, forward<Args>(args)...);
+        _msg  = CommonUtils::format_string(fmt, forward<Args>(args)...);
     }
 
     int     code() {return _code;}
@@ -48,7 +48,7 @@ public:
     string  msg()  {return _msg;}
 
     string get_desc() {
-        return format_string(
+        return CommonUtils::format_string(
             "[file:%s, line:%d] code:%d, errmsg:%s", 
             _file.c_str(), 
             _line, 

@@ -1,6 +1,5 @@
 #include "co.h"
 #include "co_mutex.h"
-#include "utils.h"
 #include <assert.h>
 
 CoMutex::CoMutex()

@@ -3,7 +3,6 @@
 #include <sched.h>
 #include "co.h"
 #include "co_exception.h"
-#include "utils.h"
 #include "common/common_utils.h"
 
 CoManager g_manager;
@@ -86,7 +85,7 @@ void CoSchedule::run()
 			_do_after_switch_func = nullptr;
 		}
 	}
-	printf("co_schedule, tid:%d, thread end\n", gettid());
+	printf("co_schedule, tid:%d, thread end\n", CommonUtils::gettid());
 }
 
 void CoSchedule::yield()
